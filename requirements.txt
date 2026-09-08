@@ -7,3 +7,10 @@ requests>=2.31
 Pillow>=10.0
 numpy>=1.24
 rasterio>=1.3
+
+# Only needed for --lightning-source panahon (see the workflow file for the
+# extra `playwright install chromium` step this source also needs). Not
+# required for the default --lightning-source pagasa.
+python-socketio[client]>=5.11
+websocket-client>=1.7
+playwright>=1.42

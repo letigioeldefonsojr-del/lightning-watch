@@ -224,7 +224,15 @@
     var latIdx = header.indexOf("latitude");
     var lonIdx = header.indexOf("longitude");
     var typeIdx = header.indexOf("type");
-    var ampIdx = header.indexOf("amplitude");
+    // "amplitude" (pagasa source) vs "amplitude_ka"/"height_m"/"num_sensors"
+    // (panahon source) -- radar_to_tiff.py names strike fields differently
+    // depending on --lightning-source, so check for both rather than
+    // assuming one.
+    var ampIdx = header.indexOf("amplitude_ka");
+    var ampUnit = ampIdx > -1 ? " kA" : "";
+    if (ampIdx === -1) ampIdx = header.indexOf("amplitude");
+    var heightIdx = header.indexOf("height_m");
+    var sensorsIdx = header.indexOf("num_sensors");
     var tsIdx = header.indexOf("timestamp");
     if (latIdx === -1 || lonIdx === -1){
       el.statPlotted.textContent = "n/a";
@@ -239,7 +247,9 @@
       var label = "";
       if (tsIdx > -1) label += "<b>" + escapeHtml(rows[i][tsIdx]) + "</b><br>";
       if (typeIdx > -1) label += escapeHtml(rows[i][typeIdx]) + " ";
-      if (ampIdx > -1) label += escapeHtml(rows[i][ampIdx]);
+      if (ampIdx > -1) label += escapeHtml(rows[i][ampIdx]) + ampUnit;
+      if (heightIdx > -1 && rows[i][heightIdx]) label += " · " + escapeHtml(rows[i][heightIdx]) + "m";
+      if (sensorsIdx > -1 && rows[i][sensorsIdx]) label += " · " + escapeHtml(rows[i][sensorsIdx]) + " sensors";
       L.circleMarker([lat, lon], {
         radius: 5, weight: 1, color: "#ffd166", fillColor: "#ffd166", fillOpacity: 0.55,
       }).bindPopup(label || (lat + ", " + lon)).addTo(markerLayer);

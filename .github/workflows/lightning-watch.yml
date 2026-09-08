@@ -1,8 +1,23 @@
 name: Lightning watch (PAGASA)
 
-# Keeps a near-continuous watch on PAGASA's live lightning feed and commits
-# a new CSV segment (one per 60-minute split) into data/lightning/ -- with
-# no human intervention and no dependency on any machine being turned on.
+# Keeps a near-continuous watch on PAGASA's live lightning feed -- via
+# panahon.gov.ph, PAGASA's own richer real-time delivery mechanism for the
+# same underlying lightning network (see radar_to_tiff.py's module
+# docstring for pagasa vs. panahon) -- and commits a new CSV segment (one
+# per 60-minute split) into data/lightning/, with no human intervention and
+# no dependency on any machine being turned on.
+#
+# NOTE: panahon is noticeably more fragile to run unattended than the
+# simpler --lightning-source pagasa (a plain REST poll): panahon needs a
+# real headless browser (Playwright, installed below) just to fetch a
+# short-lived connection ticket before every websocket connect/reconnect,
+# and depends on a mechanism PAGASA has already changed once before (see
+# _fetch_panahon_ws_ticket()'s docstring in radar_to_tiff.py for the full
+# story). If a run's watcher process dies from a failed connection,
+# scripts/watch_and_commit.py now fails that job loudly (a red X in the
+# Actions tab, not a misleading green check) so a broken run doesn't go
+# unnoticed -- watch for that if panahon.gov.ph ever changes its ticket
+# contract again.
 #
 # GitHub Actions caps a single job at 6 hours, so this can't literally run
 # forever in one job. Instead each run watches for up to 350 minutes
@@ -66,12 +81,20 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # --lightning-source panahon needs a real headless browser to fetch its
+      # connection ticket (see radar_to_tiff.py's _require_playwright()
+      # docstring for why) -- this downloads that browser onto the runner.
+      # Remove this step if you switch --lightning-source back to pagasa
+      # below, which doesn't need it.
+      - name: Install Playwright's Chromium (needed by --lightning-source panahon)
+        run: playwright install --with-deps chromium
+
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Watch PAGASA lightning feed (checkpointing every 10 min)
+      - name: Watch panahon.gov.ph lightning feed (checkpointing every 10 min)
         run: |
           python scripts/watch_and_commit.py \
             --outdir data/lightning \
@@ -80,4 +103,4 @@ jobs:
             --commit-every-minutes 10 \
             --split 60 \
             --interval 60 \
-            --lightning-source pagasa
+            --lightning-source panahon

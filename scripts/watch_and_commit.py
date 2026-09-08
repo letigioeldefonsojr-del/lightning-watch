@@ -173,10 +173,30 @@ def main() -> None:
     deadline = start + args.max_minutes * 60
     next_checkpoint = start + args.commit_every_minutes * 60
 
+    # The watch subprocess is only ever supposed to stop when *we* signal it
+    # (below, once --max-minutes is up). If it exits on its own before that,
+    # something actually went wrong (a crash, or -- for --lightning-source
+    # panahon specifically -- its websocket connection/ticket fetch failing
+    # after all retries). Without this check, that failure would still show
+    # as a green checkmark in the Actions UI (the *wrapper* script itself
+    # doesn't crash, it just checkpoints whatever partial data exists and
+    # exits 0) -- which silently hides a run that caught nothing. crashed
+    # tracks that so main() can fail loudly instead.
+    crashed = False
+
     try:
         while time.time() < deadline:
             if proc.poll() is not None:
-                print(f"Watch process exited early with code {proc.returncode}.", flush=True)
+                crashed = True
+                print(
+                    f"::error::Watch process exited early (code {proc.returncode}) -- "
+                    "it should only stop when this wrapper tells it to. This run's "
+                    "data (if any) is still being checkpointed below, but check the "
+                    "step's full log above this line for why the watcher itself died "
+                    "(for --lightning-source panahon, this is most often its "
+                    "connection-ticket fetch or websocket handshake failing).",
+                    flush=True,
+                )
                 break
             if time.time() >= next_checkpoint:
                 checkpoint(args.outdir, args.branch, "periodic")
@@ -202,6 +222,12 @@ def main() -> None:
                 except subprocess.TimeoutExpired:
                     proc.kill()
         checkpoint(args.outdir, args.branch, "final")
+
+    if crashed:
+        # Non-zero exit -> the Actions run shows a red X instead of a
+        # misleading green check, even though the checkpoint above still
+        # ran and saved whatever (if anything) was caught before the crash.
+        sys.exit(1)
 
 
 if __name__ == "__main__":

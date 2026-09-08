@@ -148,19 +148,32 @@ If you later want to shrink the 10-minute gap itself, the fix is a shorter
 cadence (e.g. every 5h30m instead of 6h) at the cost of a bit more overlap
 risk — ask if you want that tuned.
 
-## Changing things later
+## Currently using panahon.gov.ph (richer data, more fragile)
 
-- **Richer lightning data (panahon.gov.ph source):** the workflow uses
-  `--lightning-source pagasa` (simple, reliable, no extra dependencies —
-  good for unattended runs). `radar_to_tiff.py` also supports
-  `--lightning-source panahon` for richer per-strike fields (cloud-to-ground
-  vs. cloud-to-cloud, peak current, sensor count), but it needs
-  `python-socketio` **and Playwright + a headless Chromium download** in
-  the workflow, and depends on a connection-ticket mechanism that's more
-  fragile to run unattended. Switchable by editing the `--lightning-source`
-  flag in `.github/workflows/lightning-watch.yml`, plus adding those
-  packages to `requirements.txt` and a Playwright browser-install step —
-  ask if you'd like this wired up.
+This is set to `--lightning-source panahon` — PAGASA's richer real-time feed
+(cloud-to-ground vs. cloud-to-cloud, peak current in kA, strike height,
+sensor count), instead of the simpler `pagasa` REST poll it started on.
+
+Worth knowing about this source specifically:
+
+- It needs a real headless browser (Playwright + Chromium, installed by the
+  workflow's **"Install Playwright's Chromium"** step) just to fetch a
+  short-lived connection ticket before every websocket connect/reconnect —
+  see `_fetch_panahon_ws_ticket()` in `radar_to_tiff.py` for why plain HTTP
+  requests don't work here. That's more moving parts than `pagasa`'s plain
+  polling, and one more thing that can break if panahon.gov.ph changes how
+  that ticket works again (it's already changed once before).
+- Because of that, `scripts/watch_and_commit.py` now specifically watches
+  for the watcher process dying unexpectedly and, if it does, prints a
+  `::error::` line (shows up as a red X on the run, plus an annotation —
+  the same kind of banner you saw on your pagasa test) instead of quietly
+  finishing green with no data. If you ever see a failed run, that's almost
+  certainly this — open the **"Watch panahon.gov.ph lightning feed"** step's
+  log and look for a line starting with `Couldn't connect to panahon.gov.ph`.
+- If it turns out to be too flaky in practice, switching back to `pagasa` is
+  a two-line change: `--lightning-source panahon` → `pagasa` in
+  `.github/workflows/lightning-watch.yml`, and you can drop the "Install
+  Playwright's Chromium" step above it (harmless to leave in either way).
 - **Also watching radar frames:** doable as a second, similar job (radar
   frames save as GeoTIFF images, not CSV, so they'd need their own storage
   section on the dashboard) — ask and I'll add it.
