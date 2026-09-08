@@ -1,0 +1,9 @@
+# radar_to_tiff.py imports rasterio unconditionally (even in --lightning
+# mode), so it's required here too even though this project only runs the
+# lightning watcher. Pillow/numpy are used for the (unused-here) radar image
+# path but are cheap to install and keep this requirements file matching the
+# script's real top-of-file imports.
+requests>=2.31
+Pillow>=10.0
+numpy>=1.24
+rasterio>=1.3

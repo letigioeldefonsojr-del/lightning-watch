@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batangas Weather &mdash; Lightning Watch</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#0b1020; --panel:#131a30; --panel-2:#0f1526; --border:#232c48;
+    --text:#e8ecf8; --muted:#8b93b3; --accent:#ffd166; --accent-2:#5ac8fa;
+    --danger:#ff6b6b; --ok:#57d38c;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  a{color:var(--accent-2);}
+  header{
+    padding:20px 24px 16px; border-bottom:1px solid var(--border);
+    display:flex; flex-wrap:wrap; gap:12px; align-items:baseline; justify-content:space-between;
+  }
+  header h1{margin:0; font-size:1.4rem; letter-spacing:.2px;}
+  header h1 .bolt{color:var(--accent);}
+  .sub{color:var(--muted); font-size:.85rem;}
+  main{max-width:1100px; margin:0 auto; padding:20px 24px 60px;}
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:16px;
+  }
+  select, button, input{
+    background:var(--panel); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:8px 12px; font-size:.9rem;
+  }
+  button{cursor:pointer;}
+  button:hover{border-color:var(--accent-2);}
+  button.icon{padding:8px 10px;}
+  .status-dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px;}
+  .status-dot.ok{background:var(--ok);}
+  .status-dot.err{background:var(--danger);}
+  .status-dot.wait{background:var(--muted);}
+  .stats{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px;}
+  .stat{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px;}
+  .stat .n{font-size:1.5rem; font-weight:600;}
+  .stat .l{color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.05em;}
+  #map{height:420px; border-radius:10px; border:1px solid var(--border); margin-bottom:16px; background:#0e1424;}
+  .leaflet-container{background:#0e1424;}
+  .table-wrap{
+    border:1px solid var(--border); border-radius:10px; overflow:auto; max-height:480px; background:var(--panel-2);
+  }
+  table{border-collapse:collapse; width:100%; font-size:.82rem;}
+  th,td{padding:7px 10px; text-align:left; white-space:nowrap; border-bottom:1px solid var(--border);}
+  th{position:sticky; top:0; background:var(--panel); color:var(--muted); font-weight:600; text-transform:uppercase; font-size:.7rem; letter-spacing:.04em;}
+  tr:hover td{background:rgba(255,255,255,0.03);}
+  .empty, .error{padding:30px; text-align:center; color:var(--muted);}
+  .error{color:var(--danger);}
+  footer{color:var(--muted); font-size:.78rem; padding:20px 24px 40px; max-width:1100px; margin:0 auto; border-top:1px solid var(--border);}
+  footer a{color:var(--muted); text-decoration:underline;}
+  dialog{background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:20px; max-width:360px;}
+  dialog::backdrop{background:rgba(0,0,0,.5);}
+  dialog label{display:block; font-size:.8rem; color:var(--muted); margin:10px 0 4px;}
+  dialog input{width:100%;}
+  dialog .row{display:flex; gap:8px; justify-content:flex-end; margin-top:16px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1><span class="bolt">&#9889;</span> Batangas Weather &mdash; Lightning Watch</h1>
+    <div class="sub" id="repoLabel">Loading repository info&hellip;</div>
+  </div>
+  <div class="sub" id="lastUpdated"><span class="status-dot wait"></span>connecting&hellip;</div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <label class="sub" for="segmentSelect">Segment:</label>
+    <select id="segmentSelect"><option>Loading&hellip;</option></select>
+    <button id="refreshBtn" title="Refresh now">&#8635; Refresh</button>
+    <button id="settingsBtn" class="icon" title="Repository settings">&#9881;</button>
+    <span class="sub" id="autoRefreshNote" style="margin-left:auto;">Auto-refreshes every 5 min</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="statCount">&mdash;</div><div class="l">Strikes in segment</div></div>
+    <div class="stat"><div class="n" id="statPlotted">&mdash;</div><div class="l">Plotted on map</div></div>
+    <div class="stat" style="grid-column:span 2;"><div class="n" id="statRange" style="font-size:1rem;">&mdash;</div><div class="l">Time range (as reported by PAGASA)</div></div>
+  </div>
+
+  <div id="map"></div>
+  <div class="table-wrap"><div id="tableHost" class="empty">Pick a segment above, or wait for the first one to appear.</div></div>
+</main>
+
+<footer>
+  Data: PAGASA lightning feed, collected automatically every hour by a scheduled
+  <a id="repoLink" href="#" target="_blank" rel="noopener">GitHub Actions workflow</a>
+  in this repository &mdash; see <code>data/lightning/</code> for the raw CSVs and
+  <code>.github/workflows/lightning-watch.yml</code> for how it runs.
+  Map tiles &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors.
+</footer>
+
+<dialog id="settingsDialog">
+  <div class="sub" style="color:var(--text); font-weight:600; margin-bottom:4px;">Repository settings</div>
+  <div class="sub">Only needed if auto-detection guessed wrong (e.g. a custom domain).</div>
+  <label for="cfgOwner">GitHub username / org</label>
+  <input id="cfgOwner" placeholder="e.g. phoenix-flammable">
+  <label for="cfgRepo">Repository name</label>
+  <input id="cfgRepo" placeholder="e.g. lightning-watch">
+  <label for="cfgBranch">Branch</label>
+  <input id="cfgBranch" placeholder="main">
+  <div class="row">
+    <button id="cfgReset">Reset to auto-detect</button>
+    <button id="cfgSave">Save</button>
+  </div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------- config
+  var STORAGE_KEY = "lightningDashboardConfig";
+  var DATA_DIR = "data/lightning";
+  var REFRESH_MS = 5 * 60 * 1000;
+  var MAX_MARKERS = 3000; // guard against an unexpectedly huge segment
+
+  function autoDetect(){
+    // Typical GitHub Pages project site: <owner>.github.io/<repo>/...
+    // Typical GitHub Pages user/org root site: <owner>.github.io/ (repo IS
+    // "<owner>.github.io", served with no path prefix).
+    var host = location.hostname; // "<owner>.github.io"
+    var owner = host.split(".")[0] || "";
+    var parts = location.pathname.split("/").filter(Boolean);
+    var repo = parts.length > 0 ? parts[0] : (owner ? owner + ".github.io" : "");
+    return { owner: owner, repo: repo, branch: "main" };
+  }
+
+  function loadConfig(){
+    var base = autoDetect();
+    try {
+      var saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      if (saved && saved.owner && saved.repo) return saved;
+    } catch (e) { /* ignore -- fall through to auto-detected defaults */ }
+    return base;
+  }
+
+  var cfg = loadConfig();
+
+  function rawUrl(path){
+    return "https://raw.githubusercontent.com/" + cfg.owner + "/" + cfg.repo + "/" + cfg.branch + "/" + path
+      + "?_=" + Date.now(); // cache-bust -- raw.githubusercontent.com caches aggressively
+  }
+
+  // ------------------------------------------------------------- elements
+  var el = {
+    repoLabel: document.getElementById("repoLabel"),
+    repoLink: document.getElementById("repoLink"),
+    lastUpdated: document.getElementById("lastUpdated"),
+    segmentSelect: document.getElementById("segmentSelect"),
+    refreshBtn: document.getElementById("refreshBtn"),
+    settingsBtn: document.getElementById("settingsBtn"),
+    statCount: document.getElementById("statCount"),
+    statPlotted: document.getElementById("statPlotted"),
+    statRange: document.getElementById("statRange"),
+    tableHost: document.getElementById("tableHost"),
+    settingsDialog: document.getElementById("settingsDialog"),
+    cfgOwner: document.getElementById("cfgOwner"),
+    cfgRepo: document.getElementById("cfgRepo"),
+    cfgBranch: document.getElementById("cfgBranch"),
+    cfgSave: document.getElementById("cfgSave"),
+    cfgReset: document.getElementById("cfgReset"),
+  };
+
+  function renderRepoLabel(){
+    el.repoLabel.textContent = cfg.owner + "/" + cfg.repo + " @ " + cfg.branch;
+    el.repoLink.href = "https://github.com/" + cfg.owner + "/" + cfg.repo + "/actions";
+  }
+  renderRepoLabel();
+
+  function setStatus(kind, text){
+    el.lastUpdated.innerHTML = '<span class="status-dot ' + kind + '"></span>' + text;
+  }
+
+  // ---------------------------------------------------------------- CSV
+  // Small RFC4180-ish parser -- handles quoted fields containing commas,
+  // quotes ("") and newlines, which a plain String.split(",") would break
+  // on. PAGASA occasionally includes a raw "url" field that could contain
+  // characters a naive split would mishandle, so this is worth the extra
+  // few lines.
+  function parseCSV(text){
+    var rows = [], row = [], field = "", inQuotes = false;
+    for (var i = 0; i < text.length; i++){
+      var c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else {
+        if (c === '"') inQuotes = true;
+        else if (c === ','){ row.push(field); field = ""; }
+        else if (c === '\n'){ row.push(field); rows.push(row); row = []; field = ""; }
+        else if (c === '\r'){ /* skip -- \r\n handled via the \n branch */ }
+        else field += c;
+      }
+    }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    if (rows.length && rows[rows.length-1].length === 1 && rows[rows.length-1][0] === "") rows.pop();
+    if (!rows.length) return { header: [], rows: [] };
+    return { header: rows[0], rows: rows.slice(1) };
+  }
+
+  // ---------------------------------------------------------------- map
+  var map = L.map("map", { worldCopyJump: false }).setView([12.5, 122.0], 6); // Philippines
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+  var markerLayer = L.layerGroup().addTo(map);
+
+  function plotStrikes(header, rows){
+    markerLayer.clearLayers();
+    var latIdx = header.indexOf("latitude");
+    var lonIdx = header.indexOf("longitude");
+    var typeIdx = header.indexOf("type");
+    var ampIdx = header.indexOf("amplitude");
+    var tsIdx = header.indexOf("timestamp");
+    if (latIdx === -1 || lonIdx === -1){
+      el.statPlotted.textContent = "n/a";
+      return;
+    }
+    var plotted = 0;
+    var bounds = [];
+    for (var i = 0; i < rows.length && plotted < MAX_MARKERS; i++){
+      var lat = parseFloat(rows[i][latIdx]);
+      var lon = parseFloat(rows[i][lonIdx]);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      var label = "";
+      if (tsIdx > -1) label += "<b>" + escapeHtml(rows[i][tsIdx]) + "</b><br>";
+      if (typeIdx > -1) label += escapeHtml(rows[i][typeIdx]) + " ";
+      if (ampIdx > -1) label += escapeHtml(rows[i][ampIdx]);
+      L.circleMarker([lat, lon], {
+        radius: 5, weight: 1, color: "#ffd166", fillColor: "#ffd166", fillOpacity: 0.55,
+      }).bindPopup(label || (lat + ", " + lon)).addTo(markerLayer);
+      bounds.push([lat, lon]);
+      plotted++;
+    }
+    el.statPlotted.textContent = plotted + (rows.length > MAX_MARKERS ? " (capped)" : "");
+    if (bounds.length) map.fitBounds(bounds, { maxZoom: 9, padding: [20, 20] });
+  }
+
+  function escapeHtml(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+
+  // -------------------------------------------------------------- table
+  function renderTable(header, rows){
+    if (!rows.length){
+      el.tableHost.className = "empty";
+      el.tableHost.textContent = "This segment has no strikes recorded yet.";
+      return;
+    }
+    var html = "<table><thead><tr>";
+    header.forEach(function(h){ html += "<th>" + escapeHtml(h) + "</th>"; });
+    html += "</tr></thead><tbody>";
+    // Most recent first, capped for render performance -- the CSV itself
+    // (and the file behind it) still has every row.
+    var shown = rows.slice(-500).reverse();
+    shown.forEach(function(r){
+      html += "<tr>";
+      header.forEach(function(_, i){ html += "<td>" + escapeHtml(r[i]) + "</td>"; });
+      html += "</tr>";
+    });
+    html += "</tbody></table>";
+    el.tableHost.className = "";
+    el.tableHost.innerHTML = html;
+    if (rows.length > 500){
+      var note = document.createElement("div");
+      note.className = "sub";
+      note.style.padding = "8px 10px";
+      note.textContent = "Showing the most recent 500 of " + rows.length + " rows.";
+      el.tableHost.appendChild(note);
+    }
+  }
+
+  // --------------------------------------------------------- segment i/o
+  var indexData = null;
+  var currentFile = null;
+  var viewingLatest = true;
+
+  function fmtBytes(n){
+    if (n < 1024) return n + " B";
+    if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+    return (n/1024/1024).toFixed(1) + " MB";
+  }
+
+  function populateSelect(){
+    var files = (indexData && indexData.files) || [];
+    el.segmentSelect.innerHTML = "";
+    if (!files.length){
+      var opt = document.createElement("option");
+      opt.textContent = "No segments yet";
+      el.segmentSelect.appendChild(opt);
+      el.segmentSelect.disabled = true;
+      return;
+    }
+    el.segmentSelect.disabled = false;
+    // Newest first.
+    for (var i = files.length - 1; i >= 0; i--){
+      var f = files[i];
+      var o = document.createElement("option");
+      o.value = f.name;
+      var tag = (i === files.length - 1) ? " (latest)" : "";
+      o.textContent = f.name + tag + " — " + f.row_count + " strikes, " + fmtBytes(f.size_bytes);
+      el.segmentSelect.appendChild(o);
+    }
+  }
+
+  function loadSegment(name){
+    currentFile = name;
+    var latestName = indexData.files.length ? indexData.files[indexData.files.length-1].name : null;
+    viewingLatest = (name === latestName);
+    fetch(rawUrl(DATA_DIR + "/" + name), { cache: "no-store" })
+      .then(function(r){
+        if (!r.ok) throw new Error("HTTP " + r.status + " fetching " + name);
+        return r.text();
+      })
+      .then(function(text){
+        var parsed = parseCSV(text);
+        el.statCount.textContent = parsed.rows.length;
+        var tsIdx = parsed.header.indexOf("timestamp");
+        if (tsIdx > -1 && parsed.rows.length){
+          el.statRange.textContent = parsed.rows[0][tsIdx] + " → " + parsed.rows[parsed.rows.length-1][tsIdx];
+        } else {
+          el.statRange.textContent = "—";
+        }
+        plotStrikes(parsed.header, parsed.rows);
+        renderTable(parsed.header, parsed.rows);
+      })
+      .catch(function(err){
+        el.tableHost.className = "error";
+        el.tableHost.textContent = "Couldn't load " + name + ": " + err.message;
+      });
+  }
+
+  function refreshIndex(isAuto){
+    setStatus("wait", isAuto ? "refreshing…" : "loading…");
+    fetch(rawUrl(DATA_DIR + "/index.json"), { cache: "no-store" })
+      .then(function(r){
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(json){
+        indexData = json;
+        var prevSelection = el.segmentSelect.value;
+        populateSelect();
+        var files = indexData.files || [];
+        if (!files.length){
+          setStatus("ok", "Connected — no data yet. The workflow hasn't completed its first checkpoint.");
+          el.tableHost.className = "empty";
+          el.tableHost.textContent = "No segments yet — check back in a bit, or trigger the workflow manually from the Actions tab.";
+          return;
+        }
+        var latest = files[files.length - 1].name;
+        var target = (prevSelection && files.some(function(f){ return f.name === prevSelection; }) && (!viewingLatest || prevSelection === latest))
+          ? prevSelection : latest;
+        el.segmentSelect.value = target;
+        loadSegment(target);
+        setStatus("ok", "Last checked " + new Date().toLocaleTimeString() +
+          " — data generated " + new Date(indexData.generated_at).toLocaleString());
+      })
+      .catch(function(err){
+        setStatus("err", "Couldn't reach data/lightning/index.json (" + err.message + "). " +
+          "If this repo is brand new, the workflow may not have run yet — check the Actions tab, or the settings (⚙) if the owner/repo look wrong.");
+      });
+  }
+
+  el.segmentSelect.addEventListener("change", function(){
+    loadSegment(el.segmentSelect.value);
+  });
+  el.refreshBtn.addEventListener("click", function(){ refreshIndex(false); });
+  setInterval(function(){ refreshIndex(true); }, REFRESH_MS);
+
+  // ------------------------------------------------------------ settings
+  el.settingsBtn.addEventListener("click", function(){
+    el.cfgOwner.value = cfg.owner;
+    el.cfgRepo.value = cfg.repo;
+    el.cfgBranch.value = cfg.branch;
+    el.settingsDialog.showModal();
+  });
+  el.cfgSave.addEventListener("click", function(e){
+    e.preventDefault();
+    var next = {
+      owner: (el.cfgOwner.value || "").trim(),
+      repo: (el.cfgRepo.value || "").trim(),
+      branch: (el.cfgBranch.value || "main").trim() || "main",
+    };
+    if (next.owner && next.repo){
+      cfg = next;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch (e2) { /* private browsing etc. -- fine, just won't persist */ }
+      renderRepoLabel();
+      el.settingsDialog.close();
+      refreshIndex(false);
+    }
+  });
+  el.cfgReset.addEventListener("click", function(e){
+    e.preventDefault();
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e2) { /* ignore */ }
+    cfg = autoDetect();
+    renderRepoLabel();
+    el.settingsDialog.close();
+    refreshIndex(false);
+  });
+
+  refreshIndex(false);
+})();
+</script>
+</body>
+</html>

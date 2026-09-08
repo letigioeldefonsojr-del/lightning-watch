@@ -1,0 +1,83 @@
+name: Lightning watch (PAGASA)
+
+# Keeps a near-continuous watch on PAGASA's live lightning feed and commits
+# a new CSV segment (one per 60-minute split) into data/lightning/ -- with
+# no human intervention and no dependency on any machine being turned on.
+#
+# GitHub Actions caps a single job at 6 hours, so this can't literally run
+# forever in one job. Instead each run watches for up to 350 minutes
+# (5h50m) via scripts/watch_and_commit.py, checkpoints (commits+pushes)
+# every 10 minutes along the way, then stops cleanly. The schedule below
+# starts a fresh run every 6 hours, so the next one picks up shortly after
+# the previous one stops -- in practice a small (~10 min) gap around each
+# handoff, not a hard cutoff of coverage.
+#
+# The restart times themselves (04:00/10:00/16:00/22:00 UTC below) are
+# chosen to be 12AM/6AM/12PM/6PM Philippines time (UTC+8) -- so every
+# *other* clock hour of the day (e.g. 7-8AM, or a 2-5PM storm window) sits
+# safely in the middle of a run and gets one clean, unsplit CSV file. Only
+# the hour a restart actually falls in (5-6AM, 11AM-12PM, 5-6PM, 11PM-12AM
+# Manila time) ends up split across two files with a short gap between
+# them. Change the cron below (and re-derive the "which hour becomes the
+# split hour" tradeoff) if a different set of hours matters more to you.
+#
+# IMPORTANT: this only stays free if this repository is PUBLIC. GitHub
+# Actions minutes are unlimited/free on GitHub-hosted runners for public
+# repos; private repos only get 2,000 free minutes/month on the Free plan,
+# and this workflow uses roughly 23 hours/day (~700 hours/month) -- see
+# README.md for the full explanation.
+
+on:
+  schedule:
+    - cron: '0 4,10,16,22 * * *' # 12PM, 6PM, 12AM, 6AM Philippines time (UTC+8)
+  workflow_dispatch:
+    inputs:
+      max_minutes:
+        description: 'Max minutes to run (leave as 350 for a real run; use something small like 5 to smoke-test)'
+        required: false
+        default: '350'
+
+# Never run two of these at once -- if a manual test run overlaps a
+# scheduled one, let the one already running finish rather than racing
+# both against the same branch.
+concurrency:
+  group: lightning-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    # Slightly above the script's own --max-minutes so there's headroom
+    # for the final checkpoint commit+push, but still safely under
+    # GitHub's hard 360-minute (6h) per-job ceiling.
+    timeout-minutes: 355
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Watch PAGASA lightning feed (checkpointing every 10 min)
+        run: |
+          python scripts/watch_and_commit.py \
+            --outdir data/lightning \
+            --branch "${{ github.ref_name }}" \
+            --max-minutes "${{ github.event.inputs.max_minutes || '350' }}" \
+            --commit-every-minutes 10 \
+            --split 60 \
+            --interval 60 \
+            --lightning-source pagasa
