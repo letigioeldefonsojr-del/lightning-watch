@@ -119,6 +119,26 @@
 (function(){
   "use strict";
 
+  // Global safety net. Without this, ANY uncaught error anywhere below
+  // (a CDN hiccup loading Leaflet, an unexpected response shape, anything)
+  // would previously leave the page stuck silently on "Loading…"/
+  // "connecting…" forever, with the real reason visible only in the
+  // browser console -- not exactly discoverable from a screenshot. This
+  // makes any such failure show up as a visible error message on the page
+  // itself instead.
+  function showFatalError(msg){
+    try {
+      var lu = document.getElementById("lastUpdated");
+      if (lu) lu.innerHTML = '<span class="status-dot err"></span>Error: ' + msg;
+    } catch (e) { /* even the fallback failed -- nothing more we can do from here */ }
+  }
+  window.addEventListener("error", function(e){
+    showFatalError((e && e.message) || "unknown script error");
+  });
+  window.addEventListener("unhandledrejection", function(e){
+    showFatalError((e && e.reason && e.reason.message) || String(e && e.reason));
+  });
+
   // ---------------------------------------------------------------- config
   var STORAGE_KEY = "lightningDashboardConfig";
   var DATA_DIR = "data/lightning";
@@ -212,14 +232,34 @@
   }
 
   // ---------------------------------------------------------------- map
-  var map = L.map("map", { worldCopyJump: false }).setView([12.5, 122.0], 6); // Philippines
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 18,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
-  var markerLayer = L.layerGroup().addTo(map);
+  // Wrapped in try/catch so a Leaflet load failure (CDN hiccup, blocked by
+  // something on the viewer's end) degrades to "no map" instead of
+  // crashing the whole page before it ever gets to loading real data --
+  // that used to be indistinguishable from the page just being stuck.
+  var mapAvailable = true;
+  var map, markerLayer;
+  try {
+    map = L.map("map", { worldCopyJump: false }).setView([12.5, 122.0], 6); // Philippines
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+    markerLayer = L.layerGroup().addTo(map);
+  } catch (e) {
+    mapAvailable = false;
+    console.error("Leaflet failed to initialize -- map disabled, table view still works.", e);
+    var mapEl = document.getElementById("map");
+    if (mapEl) {
+      mapEl.className = "empty";
+      mapEl.style.display = "flex";
+      mapEl.style.alignItems = "center";
+      mapEl.style.justifyContent = "center";
+      mapEl.textContent = "Map unavailable (the map library didn't load) — data below still works.";
+    }
+  }
 
   function plotStrikes(header, rows){
+    if (!mapAvailable){ el.statPlotted.textContent = "map unavailable"; return; }
     markerLayer.clearLayers();
     var latIdx = header.indexOf("latitude");
     var lonIdx = header.indexOf("longitude");

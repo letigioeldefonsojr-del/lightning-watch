@@ -565,6 +565,41 @@ _PANAHON_TICKET_JS = """
 """
 
 
+# Consecutive-failure counter for _fetch_panahon_ws_ticket(), used only to
+# print a loud, easy-to-spot warning if ticket fetches keep failing for a
+# while (e.g. panahon.gov.ph itself having an outage or being slow) --
+# python-socketio's own reconnection logic (see watch_lightning_panahon()'s
+# build_client()) already keeps retrying regardless, unlimited, 30-60s
+# apart, so this doesn't change behavior at all. It only adds visibility:
+# without it, a long stretch of these failures just looks like the same
+# line repeating in an otherwise-normal-looking log, easy to miss unless
+# someone happens to be reading it live -- this makes it show up as a
+# GitHub Actions annotation instead (the same kind of banner used for a
+# genuine crash), so a long outage doesn't go unnoticed.
+_panahon_ticket_consecutive_failures = 0
+_PANAHON_TICKET_FAILURE_WARNING_EVERY = 5
+
+
+def _note_panahon_ticket_failure():
+    global _panahon_ticket_consecutive_failures
+    _panahon_ticket_consecutive_failures += 1
+    if _panahon_ticket_consecutive_failures % _PANAHON_TICKET_FAILURE_WARNING_EVERY == 0:
+        print(
+            f"::warning::panahon.gov.ph connection ticket has failed "
+            f"{_panahon_ticket_consecutive_failures} times in a row. This is "
+            "almost always panahon.gov.ph itself being slow or briefly down, "
+            "not a bug here -- it keeps retrying automatically (unlimited "
+            "attempts, 30-60s apart) and should recover on its own once the "
+            "site responds normally again. No action needed unless this "
+            "keeps climbing for an extended stretch (say, 30+ minutes)."
+        )
+
+
+def _note_panahon_ticket_success():
+    global _panahon_ticket_consecutive_failures
+    _panahon_ticket_consecutive_failures = 0
+
+
 def _fetch_panahon_ws_ticket() -> str | None:
     """Fetch one short-lived (~120s) connection ticket from panahon.gov.ph,
     required by its Socket.IO server -- confirmed directly by reading the
@@ -608,15 +643,19 @@ def _fetch_panahon_ws_ticket() -> str | None:
                 browser.close()
     except Exception as e:
         print(f"  [panahon ticket] headless browser couldn't fetch a ticket: {e}")
+        _note_panahon_ticket_failure()
         return None
     error = result.get("error") if isinstance(result, dict) else "unexpected result shape"
     if error:
         print(f"  [panahon ticket] {error}")
+        _note_panahon_ticket_failure()
         return None
     ticket = result.get("ticket")
     if not isinstance(ticket, str):
         print(f"  [panahon ticket] response had no usable 'ticket' field: {result!r}")
+        _note_panahon_ticket_failure()
         return None
+    _note_panahon_ticket_success()
     return ticket
 
 
