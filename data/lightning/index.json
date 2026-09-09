@@ -1,4 +1,10 @@
 {
-  "files": [],
-  "generated_at": "2026-09-09T00:06:02.250103+00:00"
+  "files": [
+    {
+      "name": "panahon_lightning_split60min_Sep_09_2026_1220AM.csv",
+      "row_count": 2215,
+      "size_bytes": 177267
+    }
+  ],
+  "generated_at": "2026-09-09T00:25:44.108736+00:00"
 }
