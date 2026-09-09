@@ -98,8 +98,24 @@ jobs:
       # docstring for why) -- this downloads that browser onto the runner.
       # Remove this step if you switch --lightning-source back to pagasa
       # below, which doesn't need it.
+      # Retried up to 3 times: this step runs `apt-get update`/`install`
+      # under the hood (for --with-deps), which occasionally fails with a
+      # transient "Hash Sum mismatch" against Google's own Chrome apt repo
+      # (dl.google.com serving a momentarily out-of-sync package index) --
+      # nothing wrong on our end, it just needs a moment and another try.
       - name: Install Playwright's Chromium (needed by --lightning-source panahon)
-        run: playwright install --with-deps chromium
+        run: |
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt/3..."
+            if playwright install --with-deps chromium; then
+              echo "Succeeded."
+              exit 0
+            fi
+            echo "Attempt $attempt failed -- retrying in 20s..."
+            sleep 20
+          done
+          echo "::error::Failed to install Playwright's Chromium after 3 attempts."
+          exit 1
 
       - name: Configure git identity
         run: |
