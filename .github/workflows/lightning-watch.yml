@@ -48,12 +48,15 @@ name: Lightning watch (PAGASA)
 # README.md for the full explanation.
 
 on:
-  schedule:
-    # Minute deliberately NOT :00 -- GitHub's own docs warn that scheduled
-    # workflows firing exactly on the hour are more likely to be delayed or
-    # dropped, since that's the highest-traffic moment for their scheduler
-    # across every repo on GitHub. :05 avoids that congestion.
-    - cron: '5 0,3,6,9,12,15,18,21 * * *' # 8:05AM, 11:05AM, 2:05PM, 5:05PM, 8:05PM, 11:05PM, 2:05AM, 5:05AM Philippines time (UTC+8)
+  # GitHub's own `schedule:` trigger turned out to be unreliable in practice
+  # (it silently missed multiple 3-hourly slots in a row on 2026-09-09,
+  # despite being configured correctly -- a known but undocumented-severity
+  # flakiness in GitHub's own cron scheduler, not something in this repo).
+  # Scheduling now lives OUTSIDE GitHub entirely: an external free service
+  # (cron-job.org) calls this workflow's `workflow_dispatch` REST endpoint
+  # every 3 hours instead, which is a normal, reliably-delivered API call
+  # rather than GitHub's best-effort internal cron. See README.md's
+  # "External scheduler (cron-job.org)" section for the exact setup.
   workflow_dispatch:
     inputs:
       max_minutes:

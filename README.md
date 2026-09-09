@@ -50,18 +50,19 @@ git push -u origin main
 ### 3. Confirm the workflow runs
 
 Go to the repo's **Actions** tab on GitHub. You should see "Lightning watch
-(PAGASA)" listed. It's on a schedule (every 6 hours, see below), but to
-test it right away without waiting:
+(PAGASA)" listed. To test it right away:
 
 1. Click the workflow, click **Run workflow**.
 2. Set **max_minutes** to something small, like `5`, for a quick smoke test.
-3. Click **Run workflow** again to confirm.
+3. Click **Run workflow** again inside the dropdown to actually confirm it —
+   don't navigate away until a new run appears at the top of the list with
+   a spinner/yellow icon, or it may not have actually started.
 4. Watch it run — after a couple of minutes you should see commits
    appearing with new files under `data/lightning/`.
 
-Once you've confirmed it works, real scheduled runs use the default 350
-minutes (5h50m) automatically — you don't need to touch `max_minutes` for
-those.
+Once you've confirmed it works, real runs (started by the external
+scheduler set up in step 5 below) use the default 170 minutes (2h50m)
+automatically — you don't need to touch `max_minutes` for those.
 
 ### 4. Turn on the dashboard (GitHub Pages)
 
@@ -76,11 +77,62 @@ should just work. If you ever host it somewhere else (a custom domain) and
 it can't guess correctly, click the ⚙ gear icon on the page to set the
 GitHub username/repo/branch by hand.
 
+### 5. Set up the external scheduler (cron-job.org)
+
+This is what actually makes it run unattended, every 3 hours, forever.
+GitHub Actions does have its own built-in `schedule:` trigger, but in
+practice it turned out to be unreliable for this workflow — it silently
+skipped multiple scheduled runs in a row with no error anywhere. Rather
+than depend on it, this workflow only listens for `workflow_dispatch`
+("start me now") calls, and a free outside service calls that on a
+schedule instead — a plain API request, not GitHub's own best-effort cron.
+
+1. **Get a GitHub token**, so the outside service is allowed to start your
+   workflow: github.com → your profile picture (top-right) → **Settings**
+   → **Developer settings** (bottom of the left sidebar) → **Personal
+   access tokens** → **Fine-grained tokens** → **Generate new token**.
+   - Name it anything (e.g. `lightning-watch-scheduler`).
+   - **Repository access**: "Only select repositories" → pick this repo.
+   - **Permissions → Repository permissions** → set **Actions** to
+     **Read and write**.
+   - **Expiration**: pick the longest option available (or a custom date
+     far out) — this token needs to keep working unattended, and it can
+     only touch this one repo's Actions, so a long lifetime is low-risk.
+   - Generate it and copy the value shown (starts with `github_pat_...`)
+     immediately — it's shown once, never again.
+
+2. **Create a free account** at [cron-job.org](https://cron-job.org).
+
+3. **Create a cronjob** with these exact settings:
+   - **URL**: `https://api.github.com/repos/<your-username>/<your-repo>/actions/workflows/lightning-watch.yml/dispatches`
+   - **Schedule**: every 3 hours, at a few minutes past the hour (e.g.
+     `:10`) rather than exactly on the hour — cron-job.org lets you pick a
+     timezone per job; set it to `Asia/Manila` and schedule `2:10, 5:10,
+     8:10, 11:10` AM and PM.
+   - **Request method**: `POST`
+   - **Headers**: add these three —
+     - `Authorization: Bearer <your token from step 1>`
+     - `Accept: application/vnd.github+json`
+     - `X-GitHub-Api-Version: 2022-11-28`
+   - **Request body** (raw JSON):
+     ```json
+     {"ref": "main", "inputs": {"max_minutes": "170"}}
+     ```
+   - Save it. A successful call gets back an empty response with status
+     `204` — that's correct, not an error; you can confirm it worked by
+     checking the repo's Actions tab for a new run right after the
+     scheduled time.
+
 ## How this actually works
 
 - **"Runs even when my PC is off"** — GitHub's own servers run the
-  workflow, on their schedule, regardless of whether your computer is on.
-  That's what "runs through GitHub" (GitHub *Actions*, specifically) means.
+  workflow, regardless of whether your computer is on. That's what "runs
+  through GitHub" (GitHub *Actions*, specifically) means. It's started
+  every 3 hours by cron-job.org's free scheduler (step 5 above) calling
+  GitHub's API — not by GitHub's own `schedule:` trigger, which turned out
+  to be unreliable for this workflow (see "Why an external scheduler"
+  below) — but the actual watching/collecting still all happens on
+  GitHub's servers either way.
 
 - **"Saved every 60 minutes split as CSV"** — this is exactly your script's
   existing `--watch --split 60` behavior: it writes to one CSV for 60
@@ -107,45 +159,50 @@ GitHub username/repo/branch by hand.
 ## Why a single job can't just run forever
 
 GitHub caps every individual job at **6 hours**. `watch_and_commit.py`
-stops the watcher cleanly (same as pressing Ctrl+C) after 350 minutes
-(5h50m), commits one last time, and exits. The schedule
-(`.github/workflows/lightning-watch.yml`) then starts a brand new run every
-6 hours, which picks up right where the last one left off.
+stops the watcher cleanly (same as pressing Ctrl+C) after 170 minutes
+(2h50m), commits one last time, and exits. The external scheduler
+(cron-job.org, step 5 above) then starts a brand new run every 3 hours,
+which picks up right where the last one left off.
+
+### Why an external scheduler instead of GitHub's own `schedule:`
+
+Earlier this was set up using GitHub Actions' built-in `schedule:` (cron)
+trigger, which is the normal way to do this. In practice, on 2026-09-09,
+it silently missed several scheduled runs in a row — no error, no failed
+run shown anywhere, it just never started. GitHub's own docs do warn that
+scheduled workflows "may be delayed during periods of high load," but this
+was worse than a short delay. Rather than keep debugging GitHub's internal
+scheduler, this workflow now only responds to `workflow_dispatch` ("start
+me now" calls), and a free outside service (cron-job.org) makes that call
+every 3 hours instead — a plain, reliably-delivered API request rather
+than best-effort internal cron.
 
 ### Which hours get a clean, unsplit file
 
 Every hour gets its own CSV (that's `--split 60`) — but the hour a restart
 happens to land in ends up split across two files with a short gap in
-between, instead of being one clean file. The four restarts are scheduled
-for **12AM, 6AM, 12PM, and 6PM Philippines time**, specifically so that
-hour is one you're unlikely to care much about:
-
-- 12AM–5:50AM run → 6AM run picks up: the **5–6AM** hour is the split one.
-- 6AM–11:50AM run → 12PM run picks up: the **11AM–12PM** hour is the split one.
-- 12PM–5:50PM run → 6PM run picks up: the **5–6PM** hour is the split one.
-- 6PM–11:50PM run → 12AM run picks up: the **11PM–12AM** hour is the split one.
-
-Every other hour — including 7–8AM, and typical afternoon storm hours like
-2–5PM — sits safely in the middle of a run and gets one clean file. If a
-*different* set of four hours matters more to you than 5-6AM/11AM-12PM/5-
-6PM/11PM-12AM, tell me which ones you'd rather have split instead and I'll
-re-time the schedule (`cron` line in `.github/workflows/lightning-watch.yml`)
+between, instead of being one clean file. The eight restarts are scheduled
+for **2:10, 5:10, 8:10, and 11:10 AM & PM Philippines time** (the `:10`
+rather than on-the-hour is deliberate — see above), so the hours split are
+1-2AM, 4-5AM, 7-8AM, 10-11AM, and their PM equivalents. Every other hour —
+including typical afternoon storm hours like 2-4PM — sits safely in the
+middle of a run and gets one clean file. Tell me if a different set of
+hours matters more to you and I'll re-time the cron-job.org schedule
 around that.
 
 ### Two smaller gaps
 
 1. **The ~10-minute handoff itself.** Each run stops 10 minutes before the
-   next one starts (5h50m watch + a 6h cadence), so there's a short window
+   next one starts (2h50m watch + a 3h cadence), so there's a short window
    at each restart where nothing is being collected. PAGASA's own feed only
    ever shows a short recent rolling window (no way to ask it for history),
    so this is a real, if small, loss — not just a display glitch.
-2. **Scheduled-run delays.** GitHub says scheduled workflows "may be
-   delayed during periods of high load" — usually seconds to a couple of
-   minutes, occasionally more. Nothing to configure around; just don't
-   expect second-perfect timing.
+2. **Ordinary API/network delays.** An outside service calling GitHub's API
+   can itself be a little late (seconds, occasionally a minute or two) —
+   nothing to configure around, just don't expect second-perfect timing.
 
 If you later want to shrink the 10-minute gap itself, the fix is a shorter
-cadence (e.g. every 5h30m instead of 6h) at the cost of a bit more overlap
+cadence (e.g. every 2h40m instead of 3h) at the cost of a bit more overlap
 risk — ask if you want that tuned.
 
 ## Currently using panahon.gov.ph (richer data, more fragile)
