@@ -94,6 +94,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      # --insecure is required here: ws.panahon.gov.ph fails Python's TLS
+      # verification with "unable to get local issuer certificate" (a
+      # missing-intermediate-certificate server misconfiguration -- a real
+      # browser tolerates it, Python's ssl module doesn't). See the
+      # build_client() comments in radar_to_tiff.py for the full story.
       - name: Watch panahon.gov.ph lightning feed (checkpointing every 10 min)
         run: |
           python scripts/watch_and_commit.py \
@@ -103,4 +108,5 @@ jobs:
             --commit-every-minutes 10 \
             --split 60 \
             --interval 60 \
-            --lightning-source panahon
+            --lightning-source panahon \
+            --insecure

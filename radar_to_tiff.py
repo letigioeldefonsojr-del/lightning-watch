@@ -840,7 +840,18 @@ def fetch_lightning_panahon(duration: int = 20, url: str = PANAHON_LIGHTNING_WS_
     strikes = []
 
     def build_client():
-        sio = socketio.Client(reconnection=False)
+        # ssl_verify=not INSECURE: ws.panahon.gov.ph has been observed
+        # failing Python's TLS verification with "unable to get local
+        # issuer certificate" (a missing-intermediate-certificate server
+        # misconfiguration -- confirmed live, same class of issue as
+        # api.meteopilipinas.gov.ph's already-documented SSL error in
+        # download_png() above) even though a real browser connects fine
+        # (browsers auto-fetch a missing intermediate; Python's ssl module
+        # doesn't). Without this, --insecure had no effect on the panahon
+        # websocket connection itself -- only on download_png()'s image
+        # fetches -- even though the GUI's "Skip SSL verification" checkbox
+        # implies it covers everything.
+        sio = socketio.Client(reconnection=False, ssl_verify=not INSECURE)
 
         @sio.on(PANAHON_LIGHTNING_EVENT)
         def _on_strike(raw):
@@ -1002,9 +1013,14 @@ def watch_lightning_panahon(
         # their server for no better odds of success. 30-60s is still
         # plenty responsive (recovers within a minute of the server coming
         # back) without hammering either side during an extended outage.
+        # ssl_verify=not INSECURE -- see the matching comment in
+        # fetch_lightning_panahon()'s build_client() above: ws.panahon.gov.ph
+        # can fail Python's TLS verification ("unable to get local issuer
+        # certificate") even though a real browser connects to it fine.
         sio = socketio.Client(
             reconnection=True, reconnection_attempts=0,
             reconnection_delay=30, reconnection_delay_max=60,
+            ssl_verify=not INSECURE,
         )
 
         # Filled in by python-socketio if the server rejects the initial "/"

@@ -156,6 +156,16 @@ def main() -> None:
     ap.add_argument("--split", type=int, default=60)
     ap.add_argument("--interval", type=int, default=60)
     ap.add_argument("--lightning-source", default="pagasa")
+    ap.add_argument(
+        "--insecure", action="store_true",
+        help=(
+            "Passed straight through to radar_to_tiff.py's --insecure. Needed for "
+            "--lightning-source panahon: ws.panahon.gov.ph has been observed failing "
+            "Python's TLS verification (missing intermediate certificate) even though "
+            "a real browser connects fine -- see radar_to_tiff.py's build_client() "
+            "comments. Not needed for --lightning-source pagasa."
+        ),
+    )
     args = ap.parse_args()
 
     args.outdir.mkdir(parents=True, exist_ok=True)
@@ -166,6 +176,8 @@ def main() -> None:
         "--watch", "--split", str(args.split), "--interval", str(args.interval),
         "--outdir", str(args.outdir),
     ]
+    if args.insecure:
+        cmd.append("--insecure")
     print(f"Starting: {' '.join(cmd)}", flush=True)
     proc = subprocess.Popen(cmd)
 

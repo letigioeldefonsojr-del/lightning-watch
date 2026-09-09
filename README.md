@@ -174,6 +174,18 @@ Worth knowing about this source specifically:
   a two-line change: `--lightning-source panahon` → `pagasa` in
   `.github/workflows/lightning-watch.yml`, and you can drop the "Install
   Playwright's Chromium" step above it (harmless to leave in either way).
+- **Known fix already applied:** `ws.panahon.gov.ph` (the actual strike feed
+  server, separate from the `panahon.gov.ph` site itself) fails Python's TLS
+  certificate verification with "unable to get local issuer certificate" —
+  the server doesn't send its full certificate chain, which a real browser
+  tolerates but Python's `ssl` module doesn't. This is the same class of
+  issue `radar_to_tiff.py` already documented for `api.meteopilipinas.gov.ph`
+  in `download_png()`. The workflow now passes `--insecure` (which
+  `scripts/watch_and_commit.py` forwards to `radar_to_tiff.py`, which now
+  actually wires it into the panahon websocket connection — it previously
+  only affected radar image downloads) to work around it. This only skips
+  certificate verification for PAGASA's own public, non-sensitive endpoints,
+  same reasoning as everywhere else `--insecure` is used in this project.
 - **Also watching radar frames:** doable as a second, similar job (radar
   frames save as GeoTIFF images, not CSV, so they'd need their own storage
   section on the dashboard) — ask and I'll add it.
