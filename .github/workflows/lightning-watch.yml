@@ -28,12 +28,13 @@ name: Lightning watch (PAGASA)
 # handoff, not a hard cutoff of coverage.
 #
 # The restart times themselves (00:00/03:00/06:00/09:00/12:00/15:00/18:00/
-# 21:00 UTC below) are chosen to land exactly on 12AM/3AM/6AM/9AM/12PM/3PM/
-# 6PM/9PM Philippines time (UTC+8) -- i.e. every 3 hours on the dot. Every
-# *other* clock hour of the day sits safely in the middle of a run and gets
-# one clean, unsplit CSV file; only the hour a restart actually falls in
-# (e.g. 2-3AM, 5-6AM, 8-9AM, 11AM-12PM, ...) ends up split across two files
-# with a short gap between them -- with restarts every 3h instead of 6h,
+# 21:00 UTC below) are chosen to land exactly on 8AM/11AM/2PM/5PM/8PM/11PM/
+# 2AM/5AM Philippines time (UTC+8) -- i.e. 2/5/8/11 AM and PM, every 3 hours
+# on the dot. Every *other* clock hour of the day sits safely in the middle
+# of a run and gets one clean, unsplit CSV file; only the hour a restart
+# actually falls in (e.g. 1-2AM, 4-5AM, 7-8AM, 10-11AM, ...) ends up split
+# across two files with a short gap between them -- with restarts every 3h
+# instead of 6h,
 # twice as many hours/day become one of these split hours (8 instead of 4),
 # in exchange for smaller, more frequent checkpoints. Change the cron below
 # (and re-derive the "which hour becomes the split hour" tradeoff, and
@@ -48,7 +49,11 @@ name: Lightning watch (PAGASA)
 
 on:
   schedule:
-    - cron: '0 0,3,6,9,12,15,18,21 * * *' # 12AM, 3AM, 6AM, 9AM, 12PM, 3PM, 6PM, 9PM Philippines time (UTC+8)
+    # Minute deliberately NOT :00 -- GitHub's own docs warn that scheduled
+    # workflows firing exactly on the hour are more likely to be delayed or
+    # dropped, since that's the highest-traffic moment for their scheduler
+    # across every repo on GitHub. :05 avoids that congestion.
+    - cron: '5 0,3,6,9,12,15,18,21 * * *' # 8:05AM, 11:05AM, 2:05PM, 5:05PM, 8:05PM, 11:05PM, 2:05AM, 5:05AM Philippines time (UTC+8)
   workflow_dispatch:
     inputs:
       max_minutes:
