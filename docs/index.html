@@ -143,7 +143,7 @@
   var STORAGE_KEY = "lightningDashboardConfig";
   var DATA_DIR = "data/lightning";
   var REFRESH_MS = 5 * 60 * 1000;
-  var MAX_MARKERS = 3000; // guard against an unexpectedly huge segment
+  var MAX_MARKERS = 25000; // guard against an unexpectedly huge segment (raised from 3000 -- panahon can log thousands of strikes/hour during active storms)
 
   function autoDetect(){
     // Typical GitHub Pages project site: <owner>.github.io/<repo>/...
@@ -239,11 +239,16 @@
   var mapAvailable = true;
   var map, markerLayer;
   try {
-    map = L.map("map", { worldCopyJump: false }).setView([12.5, 122.0], 6); // Philippines
+    map = L.map("map", { worldCopyJump: false, preferCanvas: true }).setView([12.5, 122.0], 6); // Philippines
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 18,
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
+    // preferCanvas: true (above) makes circleMarkers draw on one shared
+    // <canvas> instead of each getting its own SVG <path> DOM node -- with
+    // thousands of strikes in a single segment (panahon during an active
+    // storm easily exceeds MAX_MARKERS' old 3000 cap), plain SVG rendering
+    // visibly bogs the browser down; canvas stays smooth well past 20k.
     markerLayer = L.layerGroup().addTo(map);
   } catch (e) {
     mapAvailable = false;
