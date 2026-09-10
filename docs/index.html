@@ -76,6 +76,12 @@
     text-decoration:none; display:inline-block; cursor:pointer;}
   .btnlike:hover, .fileRow button:hover{border-color:var(--accent-2);}
   .btnlike.danger:hover{border-color:var(--danger); color:var(--danger);}
+  .filesPanel .vizTitle{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .linklike{
+    background:none; border:none; padding:0; color:var(--accent-2); cursor:pointer;
+    font-size:.72rem; text-transform:none; letter-spacing:normal; font-weight:400;
+  }
+  .linklike:hover{text-decoration:underline;}
 
   #map{height:420px; border-radius:10px; border:1px solid var(--border); margin-bottom:16px; background:#0e1424; position:relative;}
   .leaflet-container{background:#0e1424;}
@@ -200,8 +206,10 @@
        note inside for why -- "Delete on GitHub" instead opens GitHub's
        own delete page for that one file. -->
   <div class="filesPanel" id="filesPanel" hidden>
-    <div class="vizTitle">All saved segments (data/lightning/)</div>
-    <div class="sub">
+    <div class="vizTitle">All saved segments (data/lightning/)
+      <button type="button" id="filesNoteToggle" class="linklike">&#9656; why no delete button here?</button>
+    </div>
+    <div class="sub" id="filesNote" hidden>
       Download saves the file straight from here. Delete opens GitHub's own
       delete page for that file instead of deleting it directly from this
       page -- a real delete button here would need a repo-write key baked
@@ -307,6 +315,8 @@
     refreshBtn: document.getElementById("refreshBtn"),
     filesToggleBtn: document.getElementById("filesToggleBtn"),
     filesPanel: document.getElementById("filesPanel"),
+    filesNoteToggle: document.getElementById("filesNoteToggle"),
+    filesNote: document.getElementById("filesNote"),
     filesListHost: document.getElementById("filesListHost"),
     settingsBtn: document.getElementById("settingsBtn"),
     statCount: document.getElementById("statCount"),
@@ -988,6 +998,10 @@
     el.filesPanel.hidden = !el.filesPanel.hidden;
     el.filesToggleBtn.classList.toggle("active", !el.filesPanel.hidden);
     if (!el.filesPanel.hidden) renderAllSegments(); // always fresh on open
+  });
+  el.filesNoteToggle.addEventListener("click", function(){
+    el.filesNote.hidden = !el.filesNote.hidden;
+    el.filesNoteToggle.innerHTML = (el.filesNote.hidden ? "&#9656;" : "&#9662;") + " why no delete button here?";
   });
 
   function loadSegment(name){
