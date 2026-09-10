@@ -209,7 +209,10 @@
        own delete page for that one file. -->
   <div class="filesPanel" id="filesPanel" hidden>
     <div class="vizTitle">All saved segments (data/lightning/)
-      <button type="button" id="filesBodyToggle" class="linklike">&#9662; hide</button>
+      <span style="margin-left:auto; display:flex; gap:12px;">
+        <button type="button" id="filesReloadBtn" class="linklike" title="Re-check every file and drop any you've deleted on GitHub since this list last loaded">&#8635; reload</button>
+        <button type="button" id="filesBodyToggle" class="linklike">&#9662; hide</button>
+      </span>
     </div>
     <div id="filesBody">
       <div class="sub">
@@ -320,6 +323,7 @@
     filesToggleBtn: document.getElementById("filesToggleBtn"),
     filesPanel: document.getElementById("filesPanel"),
     filesBodyToggle: document.getElementById("filesBodyToggle"),
+    filesReloadBtn: document.getElementById("filesReloadBtn"),
     filesBody: document.getElementById("filesBody"),
     filesListHost: document.getElementById("filesListHost"),
     settingsBtn: document.getElementById("settingsBtn"),
@@ -892,8 +896,8 @@
     return (n/1024/1024).toFixed(1) + " MB";
   }
 
-  function populateSelect(){
-    var files = (indexData && indexData.files) || [];
+  function populateSelect(filesOverride){
+    var files = filesOverride || (indexData && indexData.files) || [];
     el.segmentSelect.innerHTML = "";
     if (!files.length){
       var opt = document.createElement("option");
@@ -952,8 +956,10 @@
   // Every segment ever saved (unlike populateSelect() above, which caps at
   // the 10 most recent) -- this is the "Files" panel's list, rebuilt each
   // time that panel is opened or the index refreshes while it's open.
-  function renderAllSegments(){
-    var files = (indexData && indexData.files) || [];
+  // filesOverride lets reloadFilesList() below hand it an already-verified
+  // (deleted files filtered out) list instead of the raw index.json one.
+  function renderAllSegments(filesOverride){
+    var files = filesOverride || (indexData && indexData.files) || [];
     el.filesListHost.innerHTML = "";
     if (!files.length){
       el.filesListHost.textContent = "No segments saved yet.";
@@ -998,6 +1004,47 @@
     }
   }
 
+  // A plain re-fetch of index.json isn't actually enough to make a just-
+  // deleted file disappear from this list: index.json only ever grows
+  // (see the note next to watch_and_commit.py's update_index() -- it only
+  // catches up on a deletion the next time the scheduled workflow runs,
+  // which could be up to ~3 hours away). So this does a real existence
+  // check -- a quick HEAD request per listed file -- and only keeps the
+  // ones that are still actually there, for an immediate result instead of
+  // waiting for the next run.
+  function reloadFilesList(){
+    var btn = el.filesReloadBtn;
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    fetch(rawUrl(DATA_DIR + "/index.json"), { cache: "no-store" })
+      .then(function(r){
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(json){
+        indexData = json;
+        var files = json.files || [];
+        return Promise.all(files.map(function(f){
+          return fetch(rawUrl(DATA_DIR + "/" + f.name), { method: "HEAD", cache: "no-store" })
+            .then(function(r){ return r.ok ? f : null; })
+            .catch(function(){ return f; }); // a network hiccup shouldn't make a real file vanish from the list
+        }));
+      })
+      .then(function(results){
+        var stillExist = results.filter(function(f){ return f; });
+        renderAllSegments(stillExist);
+        populateSelect(stillExist);
+        btn.textContent = original;
+        btn.disabled = false;
+      })
+      .catch(function(err){
+        console.error("Reload failed", err);
+        btn.textContent = "Failed";
+        setTimeout(function(){ btn.textContent = original; btn.disabled = false; }, 3000);
+      });
+  }
+
   el.filesToggleBtn.addEventListener("click", function(){
     el.filesPanel.hidden = !el.filesPanel.hidden;
     el.filesToggleBtn.classList.toggle("active", !el.filesPanel.hidden);
@@ -1007,6 +1054,7 @@
     el.filesBody.hidden = !el.filesBody.hidden;
     el.filesBodyToggle.innerHTML = (el.filesBody.hidden ? "&#9656; show" : "&#9662; hide");
   });
+  el.filesReloadBtn.addEventListener("click", reloadFilesList);
 
   function loadSegment(name){
     currentFile = name;

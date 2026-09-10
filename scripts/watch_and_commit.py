@@ -86,6 +86,20 @@ def update_index(outdir: Path) -> Path:
         files.append({"name": p.name, "row_count": row_count, "size_bytes": p.stat().st_size})
         print(f"  [index] added {p.name} ({row_count} rows)", flush=True)
 
+    # Drop entries for any file that's no longer actually on disk -- this is
+    # what makes a manual delete (e.g. the dashboard's "Delete on GitHub"
+    # button) actually stick. `actions/checkout` gives every run a full,
+    # up-to-date copy of the repo, so on_disk here always reflects whatever
+    # has and hasn't been deleted since the last run; without this, a
+    # deleted file's entry would otherwise stay in index.json forever, since
+    # nothing above ever removes one on its own.
+    on_disk_names = {p.name for p in on_disk}
+    before = len(files)
+    files = [f for f in files if f["name"] in on_disk_names]
+    removed = before - len(files)
+    if removed:
+        print(f"  [index] removed {removed} entr{'y' if removed == 1 else 'ies'} for file(s) deleted elsewhere", flush=True)
+
     # The most recent file may still be the actively-growing segment --
     # refresh its stats every time. Earlier (finalized/rotated-away) files
     # are only ever counted once, at the moment they're first added.
