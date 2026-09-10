@@ -851,8 +851,11 @@
       return;
     }
     el.segmentSelect.disabled = false;
-    // Newest first.
-    for (var i = files.length - 1; i >= 0; i--){
+    // Newest first, only the 10 most recent -- older segments are still on
+    // GitHub in data/lightning/ (and in index.json), just not offered here
+    // to keep the dropdown from growing forever.
+    var oldestShown = Math.max(0, files.length - 10);
+    for (var i = files.length - 1; i >= oldestShown; i--){
       var f = files[i];
       var o = document.createElement("option");
       o.value = f.name;
