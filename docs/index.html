@@ -1045,15 +1045,27 @@
       })
       .then(function(json){
         indexData = json;
-        var files = json.files || [];
-        return Promise.all(files.map(function(f){
-          return fetch(rawUrl(DATA_DIR + "/" + f.name), { method: "HEAD", cache: "no-store" })
-            .then(function(r){ return r.ok ? f : null; })
-            .catch(function(){ return f; }); // a network hiccup shouldn't make a real file vanish from the list
-        }));
+        // Checking each file's own raw URL (like the first version of this
+        // did) isn't reliable right after a delete: raw.githubusercontent.com
+        // sits behind a CDN that can keep serving a deleted file as if it
+        // still exists for a few minutes -- cache-busting query params don't
+        // reliably get around that here. GitHub's own API reflects a delete
+        // immediately, so that's what actually gets asked below instead --
+        // one call listing everything currently in data/lightning/, rather
+        // than one raw-URL request per file.
+        return fetch(
+          "https://api.github.com/repos/" + cfg.owner + "/" + cfg.repo + "/contents/" + DATA_DIR + "?ref=" + cfg.branch,
+          { cache: "no-store", headers: { "Accept": "application/vnd.github+json" } }
+        );
       })
-      .then(function(results){
-        var stillExist = results.filter(function(f){ return f; });
+      .then(function(r){
+        if (!r.ok) throw new Error("GitHub API HTTP " + r.status);
+        return r.json();
+      })
+      .then(function(dirListing){
+        var onGitHub = {};
+        (dirListing || []).forEach(function(entry){ onGitHub[entry.name] = true; });
+        var stillExist = (indexData.files || []).filter(function(f){ return onGitHub[f.name]; });
         renderAllSegments(stillExist);
         populateSelect(stillExist);
         btn.textContent = original;
