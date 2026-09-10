@@ -127,6 +127,7 @@ import json
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -174,6 +175,13 @@ LIGHTNING_URL = "https://pagasa.dost.gov.ph/api/Lightning"
 PANAHON_LIGHTNING_WS_URL = "https://ws.panahon.gov.ph"
 PANAHON_WS_TICKET_URL = "https://panahon.gov.ph/api/v1/ws-ticket"
 PANAHON_LIGHTNING_EVENT = "lx.data"
+
+# Used for filenames/timestamps below instead of time.localtime(), which is
+# UTC on a GitHub Actions runner (they don't run in Philippines time) -- a
+# strike logged around midnight would otherwise get an 8-hour-off filename
+# with no indication it wasn't already local time. A fixed UTC+8 offset is
+# exact for the Philippines specifically, which doesn't observe DST.
+PH_TZ = timezone(timedelta(hours=8))
 
 # ws.panahon.gov.ph's websocket upgrade can reject a client that opens a
 # *fresh* connection directly as a websocket (HTTP 400, no explanation) --
@@ -978,7 +986,7 @@ def watch_lightning_panahon(
     outdir.mkdir(parents=True, exist_ok=True)
 
     def make_path(now: float) -> Path:
-        stamp = time.strftime("%b_%d_%Y_%I%M%p", time.localtime(now))
+        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%I%M%p")
         if split_minutes:
             return outdir / f"panahon_lightning_split{split_minutes}min_{stamp}.csv"
         elif window_minutes:
@@ -1250,7 +1258,7 @@ def watch_lightning(
     outdir.mkdir(parents=True, exist_ok=True)
 
     def make_path(now: float) -> Path:
-        stamp = time.strftime("%b_%d_%Y_%I%M%p", time.localtime(now))
+        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%I%M%p")
         if split_minutes:
             return outdir / f"pagasa_lightning_split{split_minutes}min_{stamp}.csv"
         elif window_minutes:
@@ -1299,7 +1307,7 @@ def watch_lightning(
             writer.writeheader()
             for t, s in rows:
                 row = dict(s)
-                row["first_seen"] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t))
+                row["first_seen"] = datetime.fromtimestamp(t, tz=PH_TZ).strftime("%Y-%m-%d %H:%M:%S PHT")
                 writer.writerow(row)
         return len(rows)
 
