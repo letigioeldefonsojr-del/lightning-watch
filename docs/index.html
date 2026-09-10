@@ -227,6 +227,7 @@
         to wipe your data, so this dashboard doesn't do that. You'll need to
         be signed in to GitHub with access to this repo for delete to work.
       </div>
+      <div class="sub" id="filesReloadStatus" hidden style="color:var(--danger);"></div>
       <div class="filesListWrap" id="filesListHost">Loading&hellip;</div>
     </div>
   </div>
@@ -328,6 +329,7 @@
     filesPanel: document.getElementById("filesPanel"),
     filesBodyToggle: document.getElementById("filesBodyToggle"),
     filesReloadBtn: document.getElementById("filesReloadBtn"),
+    filesReloadStatus: document.getElementById("filesReloadStatus"),
     filesSortOrder: document.getElementById("filesSortOrder"),
     filesBody: document.getElementById("filesBody"),
     filesListHost: document.getElementById("filesListHost"),
@@ -1038,9 +1040,11 @@
     var original = btn.textContent;
     btn.disabled = true;
     btn.textContent = "Checking…";
+    el.filesReloadStatus.hidden = true;
+    el.filesReloadStatus.textContent = "";
     fetch(rawUrl(DATA_DIR + "/index.json"), { cache: "no-store" })
       .then(function(r){
-        if (!r.ok) throw new Error("HTTP " + r.status);
+        if (!r.ok) throw new Error("index.json: HTTP " + r.status);
         return r.json();
       })
       .then(function(json){
@@ -1059,12 +1063,18 @@
         );
       })
       .then(function(r){
-        if (!r.ok) throw new Error("GitHub API HTTP " + r.status);
-        return r.json();
+        // Read the body either way -- an error response's own message (rate
+        // limit, wrong branch/path, etc.) is far more useful on screen than
+        // a bare status code when something's actually wrong here.
+        return r.json().then(function(body){
+          if (!r.ok) throw new Error("GitHub API HTTP " + r.status + ": " + (body && body.message ? body.message : JSON.stringify(body)));
+          if (!Array.isArray(body)) throw new Error("GitHub API returned something unexpected (not a file listing): " + JSON.stringify(body).slice(0, 200));
+          return body;
+        });
       })
       .then(function(dirListing){
         var onGitHub = {};
-        (dirListing || []).forEach(function(entry){ onGitHub[entry.name] = true; });
+        dirListing.forEach(function(entry){ onGitHub[entry.name] = true; });
         var stillExist = (indexData.files || []).filter(function(f){ return onGitHub[f.name]; });
         renderAllSegments(stillExist);
         populateSelect(stillExist);
@@ -1073,8 +1083,10 @@
       })
       .catch(function(err){
         console.error("Reload failed", err);
-        btn.textContent = "Failed";
-        setTimeout(function(){ btn.textContent = original; btn.disabled = false; }, 3000);
+        el.filesReloadStatus.hidden = false;
+        el.filesReloadStatus.textContent = "Reload failed: " + err.message;
+        btn.textContent = original;
+        btn.disabled = false;
       });
   }
 
