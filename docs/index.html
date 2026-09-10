@@ -61,6 +61,22 @@
   .legendBar{height:10px; border-radius:6px; border:1px solid var(--border);}
   .legendLabels{display:flex; justify-content:space-between; color:var(--muted); font-size:.72rem; margin-top:5px;}
 
+  .filesPanel{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px;
+  }
+  .filesListWrap{border:1px solid var(--border); border-radius:8px; max-height:320px; overflow:auto; background:var(--panel-2);}
+  .fileRow{display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); font-size:.82rem;}
+  .fileRow:last-child{border-bottom:none;}
+  .fileRow .fname{flex:1 1 220px; word-break:break-all;}
+  .fileRow .fmeta{color:var(--muted); font-size:.75rem; white-space:nowrap;}
+  .fileRow .fbtns{display:flex; gap:6px; flex-shrink:0;}
+  .fileRow button, .btnlike{padding:5px 9px; font-size:.78rem;}
+  .btnlike{background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:8px;
+    text-decoration:none; display:inline-block; cursor:pointer;}
+  .btnlike:hover, .fileRow button:hover{border-color:var(--accent-2);}
+  .btnlike.danger:hover{border-color:var(--danger); color:var(--danger);}
+
   #map{height:420px; border-radius:10px; border:1px solid var(--border); margin-bottom:16px; background:#0e1424; position:relative;}
   .leaflet-container{background:#0e1424;}
   .table-wrap{
@@ -97,6 +113,7 @@
     <select id="segmentSelect"><option>Loading&hellip;</option></select>
     <button id="refreshBtn" title="Refresh now">&#8635; Refresh</button>
     <button id="vizToggleBtn" class="icon" title="Map style options">&#127912; Style</button>
+    <button id="filesToggleBtn" class="icon" title="All saved CSV files">&#128193; Files</button>
     <button id="settingsBtn" class="icon" title="Repository settings">&#9881;</button>
     <span class="sub" id="autoRefreshNote" style="margin-left:auto;">Auto-refreshes every 5 min</span>
   </div>
@@ -175,6 +192,24 @@
   <div class="legend" id="ageLegend">
     <div class="legendBar" id="legendBar"></div>
     <div class="legendLabels"><span>freshest (just struck)</span><span>oldest (60+ min)</span></div>
+  </div>
+
+  <!-- Every saved segment in data/lightning/ (not just the 10 most recent
+       the Segment dropdown above offers), with a real Download button.
+       There's deliberately no real Delete-from-here button -- see the
+       note inside for why -- "Delete on GitHub" instead opens GitHub's
+       own delete page for that one file. -->
+  <div class="filesPanel" id="filesPanel" hidden>
+    <div class="vizTitle">All saved segments (data/lightning/)</div>
+    <div class="sub">
+      Download saves the file straight from here. Delete opens GitHub's own
+      delete page for that file instead of deleting it directly from this
+      page -- a real delete button here would need a repo-write key baked
+      into this public page, which anyone who opened it could copy and use
+      to wipe your data, so this dashboard doesn't do that. You'll need to
+      be signed in to GitHub with access to this repo for delete to work.
+    </div>
+    <div class="filesListWrap" id="filesListHost">Loading&hellip;</div>
   </div>
 
   <div id="map"></div>
@@ -270,6 +305,9 @@
     lastUpdated: document.getElementById("lastUpdated"),
     segmentSelect: document.getElementById("segmentSelect"),
     refreshBtn: document.getElementById("refreshBtn"),
+    filesToggleBtn: document.getElementById("filesToggleBtn"),
+    filesPanel: document.getElementById("filesPanel"),
+    filesListHost: document.getElementById("filesListHost"),
     settingsBtn: document.getElementById("settingsBtn"),
     statCount: document.getElementById("statCount"),
     statPlotted: document.getElementById("statPlotted"),
@@ -865,6 +903,93 @@
     }
   }
 
+  // Fetches the raw CSV and saves it as a real file via a throwaway
+  // object-URL link, rather than just navigating to the raw GitHub URL --
+  // that would often open the CSV as plain text in the tab instead of
+  // downloading it, depending on the browser.
+  function downloadSegment(name, btn){
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Downloading…";
+    fetch(rawUrl(DATA_DIR + "/" + name))
+      .then(function(r){
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.blob();
+      })
+      .then(function(blob){
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+        btn.textContent = original;
+        btn.disabled = false;
+      })
+      .catch(function(err){
+        console.error("Download failed for " + name, err);
+        btn.textContent = "Failed";
+        setTimeout(function(){ btn.textContent = original; btn.disabled = false; }, 3000);
+      });
+  }
+
+  // Every segment ever saved (unlike populateSelect() above, which caps at
+  // the 10 most recent) -- this is the "Files" panel's list, rebuilt each
+  // time that panel is opened or the index refreshes while it's open.
+  function renderAllSegments(){
+    var files = (indexData && indexData.files) || [];
+    el.filesListHost.innerHTML = "";
+    if (!files.length){
+      el.filesListHost.textContent = "No segments saved yet.";
+      return;
+    }
+    for (var i = files.length - 1; i >= 0; i--){
+      (function(f){
+        var row = document.createElement("div");
+        row.className = "fileRow";
+
+        var nameEl = document.createElement("div");
+        nameEl.className = "fname";
+        nameEl.textContent = f.name;
+
+        var metaEl = document.createElement("div");
+        metaEl.className = "fmeta";
+        metaEl.textContent = f.row_count + " strikes, " + fmtBytes(f.size_bytes);
+
+        var btns = document.createElement("div");
+        btns.className = "fbtns";
+
+        var dlBtn = document.createElement("button");
+        dlBtn.type = "button";
+        dlBtn.textContent = "Download";
+        dlBtn.addEventListener("click", function(){ downloadSegment(f.name, dlBtn); });
+
+        var delLink = document.createElement("a");
+        delLink.className = "btnlike danger";
+        delLink.textContent = "Delete on GitHub";
+        delLink.href = "https://github.com/" + cfg.owner + "/" + cfg.repo + "/delete/" + cfg.branch + "/" + DATA_DIR + "/" + f.name;
+        delLink.target = "_blank";
+        delLink.rel = "noopener";
+        delLink.title = "Opens GitHub's delete confirmation page for this one file -- nothing is deleted until you confirm it there.";
+
+        btns.appendChild(dlBtn);
+        btns.appendChild(delLink);
+        row.appendChild(nameEl);
+        row.appendChild(metaEl);
+        row.appendChild(btns);
+        el.filesListHost.appendChild(row);
+      })(files[i]);
+    }
+  }
+
+  el.filesToggleBtn.addEventListener("click", function(){
+    el.filesPanel.hidden = !el.filesPanel.hidden;
+    el.filesToggleBtn.classList.toggle("active", !el.filesPanel.hidden);
+    if (!el.filesPanel.hidden) renderAllSegments(); // always fresh on open
+  });
+
   function loadSegment(name){
     currentFile = name;
     var latestName = indexData.files.length ? indexData.files[indexData.files.length-1].name : null;
@@ -905,6 +1030,7 @@
         indexData = json;
         var prevSelection = el.segmentSelect.value;
         populateSelect();
+        if (!el.filesPanel.hidden) renderAllSegments(); // keep the Files panel's list current if it's open
         var files = indexData.files || [];
         if (!files.length){
           setStatus("ok", "Connected — no data yet. The workflow hasn't completed its first checkpoint.");
