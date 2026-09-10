@@ -125,6 +125,7 @@
     <div class="vizRow">
       <label class="sub" for="vizSymbol">Point symbol</label>
       <select id="vizSymbol">
+        <option value="polarity">Polarity: (+) / (&minus;) by kA sign</option>
         <option value="circle">Circle</option>
         <option value="square">Square</option>
         <option value="cross">Cross (+)</option>
@@ -511,9 +512,18 @@
     if (outlineWidth == null) outlineWidth = 1.5;
     ctx.save();
     ctx.globalAlpha = alpha;
-    if (symbol === "cross" || symbol === "x"){
+    if (symbol === "cross" || symbol === "x" || symbol === "minus"){
       ctx.lineCap = "round";
       var d = symbol === "x" ? r * 0.75 : r;
+      // Builds the actual line path for whichever of the three this is --
+      // "minus" is just "cross" with the vertical stroke left out, so a
+      // negative-polarity strike reads as a plain "-" rather than a "+".
+      var buildPath = function(){
+        ctx.beginPath();
+        if (symbol === "cross"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); ctx.moveTo(cx, cy - d); ctx.lineTo(cx, cy + d); }
+        else if (symbol === "minus"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); }
+        else { ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); }
+      };
       if (outline){
         ctx.globalAlpha = 1;
         // The black "backing" line has to stay a bit thicker than the
@@ -522,17 +532,13 @@
         // margin on top of a sane minimum, rather than replacing it outright.
         ctx.lineWidth = Math.max(2.2, r * 0.85) + (outlineWidth - 1.5);
         ctx.strokeStyle = "#000";
-        ctx.beginPath();
-        if (symbol === "cross"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); ctx.moveTo(cx, cy - d); ctx.lineTo(cx, cy + d); }
-        else { ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); }
+        buildPath();
         ctx.stroke();
         ctx.globalAlpha = alpha;
       }
       ctx.lineWidth = Math.max(1.3, r * 0.5);
       ctx.strokeStyle = color;
-      ctx.beginPath();
-      if (symbol === "cross"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); ctx.moveTo(cx, cy - d); ctx.lineTo(cx, cy + d); }
-      else { ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); }
+      buildPath();
       ctx.stroke();
       ctx.restore();
       return;
@@ -584,7 +590,19 @@
       var lp = map.latLngToLayerPoint([p.lat, p.lon]);
       var cx = lp.x - canvasOrigin.x, cy = lp.y - canvasOrigin.y;
       if (cx < -30 || cy < -30 || cx > shapeCanvas.width + 30 || cy > shapeCanvas.height + 30) continue;
-      drawShape(shapeCtx, vs.symbol, cx, cy, vs.size, p.color, vs.opacity / 100, vs.outline, vs.outlineWidth);
+      // "Polarity" mode picks the symbol per-point from that strike's own
+      // kA sign, instead of every point using the one symbol chosen above --
+      // negative amplitude draws as "-", positive (or zero/unknown) as "+".
+      // Cloud-to-cloud strikes are the exception: +/- polarity is a
+      // cloud-to-ground concept (which plate the current actually struck),
+      // so a cloud-to-cloud point always draws as a plain circle instead,
+      // regardless of its kA sign.
+      var sym = vs.symbol;
+      if (sym === "polarity"){
+        if (p.type === "Cloud to Cloud") sym = "circle";
+        else sym = (p.amp != null && isFinite(p.amp) && p.amp < 0) ? "minus" : "cross";
+      }
+      drawShape(shapeCtx, sym, cx, cy, vs.size, p.color, vs.opacity / 100, vs.outline, vs.outlineWidth);
     }
   }
 
@@ -680,8 +698,15 @@
       if (heightIdx > -1 && rows[i][heightIdx]) label += " · " + escapeHtml(rows[i][heightIdx]) + "m";
       if (sensorsIdx > -1 && rows[i][sensorsIdx]) label += " · " + escapeHtml(rows[i][sensorsIdx]) + " sensors";
 
+      // Kept as a real number (not just the string) so "Polarity" symbol
+      // mode can pick "+" vs "-" per point purely off this sign.
+      var amp = ampIdx > -1 ? parseFloat(rows[i][ampIdx]) : null;
+      if (amp != null && !isFinite(amp)) amp = null;
+
       candidates.push({
         lat: lat, lon: lon,
+        amp: amp,
+        type: typeIdx > -1 ? rows[i][typeIdx] : null,
         color: vs.colorByAge ? colorForAge(ageMin) : vs.fixedColor,
         label: label || (lat + ", " + lon),
       });
