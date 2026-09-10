@@ -137,6 +137,11 @@
       <label class="vizCheck"><input type="checkbox" id="vizOutline" checked> Add a black outline</label>
     </div>
     <div class="vizRow">
+      <label class="sub" for="vizOutlineWidth" style="min-width:78px;">Outline thickness</label>
+      <input type="range" id="vizOutlineWidth" min="0.5" max="4" step="0.5" value="1.5">
+      <span class="vizNote" id="vizOutlineWidthVal">1.5 px</span>
+    </div>
+    <div class="vizRow">
       <label class="sub" for="vizSize" style="min-width:78px;">Point size</label>
       <input type="range" id="vizSize" min="2" max="14" step="0.5" value="5">
       <span class="vizNote" id="vizSizeVal">5 px</span>
@@ -280,6 +285,8 @@
     vizPanel: document.getElementById("vizPanel"),
     vizSymbol: document.getElementById("vizSymbol"),
     vizOutline: document.getElementById("vizOutline"),
+    vizOutlineWidth: document.getElementById("vizOutlineWidth"),
+    vizOutlineWidthVal: document.getElementById("vizOutlineWidthVal"),
     vizSize: document.getElementById("vizSize"),
     vizSizeVal: document.getElementById("vizSizeVal"),
     vizOpacity: document.getElementById("vizOpacity"),
@@ -391,10 +398,16 @@
   var BASEMAPS = {
     osm: { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors" },
-    dark: { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", maxZoom: 20, subdomains: "abcd",
-      attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
-    light: { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", maxZoom: 20, subdomains: "abcd",
-      attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+    // CARTO's dark_all/light_all tiles (basemaps.cartocdn.com) used to be
+    // free/keyless but now require an account + API key -- without one they
+    // still "work" (no error) but every tile comes back stamped with an
+    // "API KEY REQUIRED" watermark instead of the actual map. Esri's Canvas
+    // basemaps below are the free, no-key equivalent (same deal as the
+    // satellite option already below, which is also Esri).
+    dark: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", maxZoom: 16,
+      attribution: "Tiles &copy; Esri" },
+    light: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", maxZoom: 16,
+      attribution: "Tiles &copy; Esri" },
     topo: { url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", maxZoom: 17,
       attribution: "Map data: &copy; OpenStreetMap contributors, SRTM &mdash; map style: &copy; OpenTopoMap (CC-BY-SA)" },
     satellite: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", maxZoom: 19,
@@ -461,6 +474,7 @@
     return {
       symbol: el.vizSymbol.value,
       outline: el.vizOutline.checked,
+      outlineWidth: parseFloat(el.vizOutlineWidth.value) || 1.5,
       size: parseFloat(el.vizSize.value) || 5,
       opacity: parseFloat(el.vizOpacity.value) || 100, // 0-100, matching the slider/what gets persisted -- converted to a 0-1 alpha only at the point it's actually drawn
       colorByAge: el.vizColorByAge.checked,
@@ -493,7 +507,8 @@
     ctx.closePath();
   }
 
-  function drawShape(ctx, symbol, cx, cy, r, color, alpha, outline){
+  function drawShape(ctx, symbol, cx, cy, r, color, alpha, outline, outlineWidth){
+    if (outlineWidth == null) outlineWidth = 1.5;
     ctx.save();
     ctx.globalAlpha = alpha;
     if (symbol === "cross" || symbol === "x"){
@@ -501,7 +516,11 @@
       var d = symbol === "x" ? r * 0.75 : r;
       if (outline){
         ctx.globalAlpha = 1;
-        ctx.lineWidth = Math.max(2.2, r * 0.85);
+        // The black "backing" line has to stay a bit thicker than the
+        // colored line drawn on top of it (below) or none of the outline
+        // would actually show past the edges -- outlineWidth scales that
+        // margin on top of a sane minimum, rather than replacing it outright.
+        ctx.lineWidth = Math.max(2.2, r * 0.85) + (outlineWidth - 1.5);
         ctx.strokeStyle = "#000";
         ctx.beginPath();
         if (symbol === "cross"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); ctx.moveTo(cx, cy - d); ctx.lineTo(cx, cy + d); }
@@ -549,7 +568,7 @@
     ctx.fill();
     if (outline){
       ctx.globalAlpha = 1;
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = outlineWidth;
       ctx.strokeStyle = "#000";
       ctx.stroke();
     }
@@ -565,7 +584,7 @@
       var lp = map.latLngToLayerPoint([p.lat, p.lon]);
       var cx = lp.x - canvasOrigin.x, cy = lp.y - canvasOrigin.y;
       if (cx < -30 || cy < -30 || cx > shapeCanvas.width + 30 || cy > shapeCanvas.height + 30) continue;
-      drawShape(shapeCtx, vs.symbol, cx, cy, vs.size, p.color, vs.opacity / 100, vs.outline);
+      drawShape(shapeCtx, vs.symbol, cx, cy, vs.size, p.color, vs.opacity / 100, vs.outline, vs.outlineWidth);
     }
   }
 
@@ -590,6 +609,20 @@
     return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
       return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
     });
+  }
+
+  // Peak current (amplitude_ka / amplitude) is signed -- negative means a
+  // negative-polarity strike, positive means positive-polarity, which is
+  // meaningful info, not just a minus sign. Shown here as an explicit
+  // "(-)"/"(+)" prefix (with the sign itself stripped out of the number)
+  // rather than relying on a bare "-" that's easy to miss at a glance.
+  function formatAmpKA(raw){
+    if (raw == null || raw === "") return "";
+    var n = parseFloat(raw);
+    if (!isFinite(n)) return escapeHtml(raw); // not a number -- show as-is rather than guessing
+    var abs = Math.abs(n);
+    var sign = n < 0 ? "(-) " : n > 0 ? "(+) " : "";
+    return sign + abs;
   }
 
   // ------------------------------------------------- map data <-> style
@@ -643,7 +676,7 @@
       var label = "";
       if (tsRaw) label += "<b>" + escapeHtml(tsRaw) + "</b><br>";
       if (typeIdx > -1) label += escapeHtml(rows[i][typeIdx]) + " ";
-      if (ampIdx > -1) label += escapeHtml(rows[i][ampIdx]) + ampUnit;
+      if (ampIdx > -1) label += formatAmpKA(rows[i][ampIdx]) + ampUnit;
       if (heightIdx > -1 && rows[i][heightIdx]) label += " · " + escapeHtml(rows[i][heightIdx]) + "m";
       if (sensorsIdx > -1 && rows[i][sensorsIdx]) label += " · " + escapeHtml(rows[i][sensorsIdx]) + " sensors";
 
@@ -669,12 +702,14 @@
   }
 
   // ----------------------------------------------------- style controls
-  var VIZ_DEFAULTS = { symbol: "circle", outline: true, size: 5, opacity: 100, colorByAge: true, fixedColor: "#ffd166", timeWindow: "all", basemap: "osm" };
+  var VIZ_DEFAULTS = { symbol: "circle", outline: true, outlineWidth: 1.5, size: 5, opacity: 100, colorByAge: true, fixedColor: "#ffd166", timeWindow: "all", basemap: "osm" };
 
   function applyVizToControls(v){
     el.vizBasemap.value = v.basemap || "osm"; // just syncs the dropdown -- the map's actual tile layer is set separately (at init, and on user change below) to avoid recreating it on every unrelated restyle
     el.vizSymbol.value = v.symbol;
     el.vizOutline.checked = !!v.outline;
+    el.vizOutlineWidth.value = v.outlineWidth || 1.5;
+    el.vizOutlineWidthVal.textContent = (v.outlineWidth || 1.5) + " px";
     el.vizSize.value = v.size;
     el.vizSizeVal.textContent = v.size + " px";
     el.vizOpacity.value = v.opacity;
@@ -704,11 +739,12 @@
   function onVizChange(){
     el.vizSizeVal.textContent = el.vizSize.value + " px";
     el.vizOpacityVal.textContent = el.vizOpacity.value + "%";
+    el.vizOutlineWidthVal.textContent = el.vizOutlineWidth.value + " px";
     el.vizFixedColor.style.visibility = el.vizColorByAge.checked ? "hidden" : "visible";
     saveVizSettings();
     computeAndPlot(false);
   }
-  [el.vizSymbol, el.vizOutline, el.vizSize, el.vizOpacity, el.vizColorByAge, el.vizFixedColor, el.vizTimeWindow]
+  [el.vizSymbol, el.vizOutline, el.vizOutlineWidth, el.vizSize, el.vizOpacity, el.vizColorByAge, el.vizFixedColor, el.vizTimeWindow]
     .forEach(function(control){
       control.addEventListener("input", onVizChange);
       control.addEventListener("change", onVizChange);
@@ -738,6 +774,11 @@
       el.tableHost.textContent = "This segment has no strikes recorded yet.";
       return;
     }
+    // Same amplitude_ka (panahon) vs. amplitude (pagasa) column-name check
+    // as computeAndPlot() above -- that column gets the (-)/(+) polarity
+    // prefix, every other column renders as plain text same as before.
+    var ampCol = header.indexOf("amplitude_ka");
+    if (ampCol === -1) ampCol = header.indexOf("amplitude");
     var html = "<table><thead><tr>";
     header.forEach(function(h){ html += "<th>" + escapeHtml(h) + "</th>"; });
     html += "</tr></thead><tbody>";
@@ -746,7 +787,9 @@
     var shown = rows.slice(-500).reverse();
     shown.forEach(function(r){
       html += "<tr>";
-      header.forEach(function(_, i){ html += "<td>" + escapeHtml(r[i]) + "</td>"; });
+      header.forEach(function(_, i){
+        html += "<td>" + (i === ampCol ? formatAmpKA(r[i]) : escapeHtml(r[i])) + "</td>";
+      });
       html += "</tr>";
     });
     html += "</tbody></table>";
