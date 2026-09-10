@@ -34,6 +34,7 @@
   button{cursor:pointer;}
   button:hover{border-color:var(--accent-2);}
   button.icon{padding:8px 10px;}
+  button.active{border-color:var(--accent); color:var(--accent);}
   .status-dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px;}
   .status-dot.ok{background:var(--ok);}
   .status-dot.err{background:var(--danger);}
@@ -42,7 +43,25 @@
   .stat{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 14px;}
   .stat .n{font-size:1.5rem; font-weight:600;}
   .stat .l{color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.05em;}
-  #map{height:420px; border-radius:10px; border:1px solid var(--border); margin-bottom:16px; background:#0e1424;}
+
+  .vizPanel{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:14px 16px; margin-bottom:14px; display:flex; flex-direction:column; gap:12px;
+  }
+  .vizPanel .vizTitle{font-size:.78rem; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600;}
+  .vizRow{display:flex; flex-wrap:wrap; align-items:center; gap:10px;}
+  .vizRow > label.sub{white-space:nowrap;}
+  .vizRow input[type=range]{flex:1 1 140px; min-width:120px; padding:0; accent-color:var(--accent);}
+  .vizRow input[type=color]{padding:2px; width:44px; height:34px; cursor:pointer;}
+  .vizRow input[type=checkbox]{width:16px; height:16px; padding:0; accent-color:var(--accent);}
+  .vizCheck{display:flex; align-items:center; gap:6px; cursor:pointer; color:var(--muted); font-size:.85rem;}
+  .vizNote{color:var(--muted); font-size:.75rem; min-width:52px; text-align:right;}
+  .legend{margin-bottom:14px;}
+  .legend.hiddenLegend{display:none;}
+  .legendBar{height:10px; border-radius:6px; border:1px solid var(--border);}
+  .legendLabels{display:flex; justify-content:space-between; color:var(--muted); font-size:.72rem; margin-top:5px;}
+
+  #map{height:420px; border-radius:10px; border:1px solid var(--border); margin-bottom:16px; background:#0e1424; position:relative;}
   .leaflet-container{background:#0e1424;}
   .table-wrap{
     border:1px solid var(--border); border-radius:10px; overflow:auto; max-height:480px; background:var(--panel-2);
@@ -77,6 +96,7 @@
     <label class="sub" for="segmentSelect">Segment:</label>
     <select id="segmentSelect"><option>Loading&hellip;</option></select>
     <button id="refreshBtn" title="Refresh now">&#8635; Refresh</button>
+    <button id="vizToggleBtn" class="icon" title="Map style options">&#127912; Style</button>
     <button id="settingsBtn" class="icon" title="Repository settings">&#9881;</button>
     <span class="sub" id="autoRefreshNote" style="margin-left:auto;">Auto-refreshes every 5 min</span>
   </div>
@@ -85,6 +105,70 @@
     <div class="stat"><div class="n" id="statCount">&mdash;</div><div class="l">Strikes in segment</div></div>
     <div class="stat"><div class="n" id="statPlotted">&mdash;</div><div class="l">Plotted on map</div></div>
     <div class="stat" style="grid-column:span 2;"><div class="n" id="statRange" style="font-size:1rem;">&mdash;</div><div class="l">Time range (as reported by PAGASA)</div></div>
+  </div>
+
+  <!-- Map-only style controls. Nothing here touches the CSV files, the
+       table below, or the collection workflow -- purely how the map
+       currently displays already-saved data in this browser. -->
+  <div class="vizPanel" id="vizPanel" hidden>
+    <div class="vizTitle">Map style (this browser only -- doesn't change any saved data)</div>
+    <div class="vizRow">
+      <label class="sub" for="vizBasemap" style="min-width:78px;">Base map</label>
+      <select id="vizBasemap">
+        <option value="osm">Streets (OpenStreetMap)</option>
+        <option value="dark">Dark</option>
+        <option value="light">Light</option>
+        <option value="topo">Terrain</option>
+        <option value="satellite">Satellite</option>
+      </select>
+    </div>
+    <div class="vizRow">
+      <label class="sub" for="vizSymbol">Point symbol</label>
+      <select id="vizSymbol">
+        <option value="circle">Circle</option>
+        <option value="square">Square</option>
+        <option value="cross">Cross (+)</option>
+        <option value="x">X</option>
+        <option value="triangle">Triangle</option>
+        <option value="diamond">Diamond</option>
+        <option value="star">Star</option>
+        <option value="bolt">&#9889; Lightning bolt</option>
+      </select>
+      <label class="vizCheck"><input type="checkbox" id="vizOutline" checked> Add a black outline</label>
+    </div>
+    <div class="vizRow">
+      <label class="sub" for="vizSize" style="min-width:78px;">Point size</label>
+      <input type="range" id="vizSize" min="2" max="14" step="0.5" value="5">
+      <span class="vizNote" id="vizSizeVal">5 px</span>
+    </div>
+    <div class="vizRow">
+      <label class="sub" for="vizOpacity" style="min-width:78px;">Opacity</label>
+      <input type="range" id="vizOpacity" min="10" max="100" step="5" value="100">
+      <span class="vizNote" id="vizOpacityVal">100%</span>
+    </div>
+    <div class="vizRow">
+      <label class="vizCheck"><input type="checkbox" id="vizColorByAge" checked> Color by strike age</label>
+      <input type="color" id="vizFixedColor" value="#ffd166" title="Used when 'Color by strike age' is off">
+    </div>
+    <div class="vizRow">
+      <label class="sub" for="vizTimeWindow" style="min-width:78px;">Show on map</label>
+      <select id="vizTimeWindow">
+        <option value="all">All strikes in this segment</option>
+        <option value="5">Only last 5 minutes</option>
+        <option value="15">Only last 15 minutes</option>
+        <option value="30">Only last 30 minutes</option>
+        <option value="60">Only last 60 minutes</option>
+      </select>
+      <span class="sub" style="margin-left:auto;">(table below always shows everything)</span>
+    </div>
+    <div class="vizRow">
+      <button id="vizResetBtn">Reset style to defaults</button>
+    </div>
+  </div>
+
+  <div class="legend" id="ageLegend">
+    <div class="legendBar" id="legendBar"></div>
+    <div class="legendLabels"><span>freshest (just struck)</span><span>oldest (60+ min)</span></div>
   </div>
 
   <div id="map"></div>
@@ -141,6 +225,7 @@
 
   // ---------------------------------------------------------------- config
   var STORAGE_KEY = "lightningDashboardConfig";
+  var VIZ_STORAGE_KEY = "lightningDashboardVizStyle";
   var DATA_DIR = "data/lightning";
   var REFRESH_MS = 5 * 60 * 1000;
   var MAX_MARKERS = 25000; // guard against an unexpectedly huge segment (raised from 3000 -- panahon can log thousands of strikes/hour during active storms)
@@ -190,6 +275,22 @@
     cfgBranch: document.getElementById("cfgBranch"),
     cfgSave: document.getElementById("cfgSave"),
     cfgReset: document.getElementById("cfgReset"),
+    // map style controls
+    vizToggleBtn: document.getElementById("vizToggleBtn"),
+    vizPanel: document.getElementById("vizPanel"),
+    vizSymbol: document.getElementById("vizSymbol"),
+    vizOutline: document.getElementById("vizOutline"),
+    vizSize: document.getElementById("vizSize"),
+    vizSizeVal: document.getElementById("vizSizeVal"),
+    vizOpacity: document.getElementById("vizOpacity"),
+    vizOpacityVal: document.getElementById("vizOpacityVal"),
+    vizColorByAge: document.getElementById("vizColorByAge"),
+    vizFixedColor: document.getElementById("vizFixedColor"),
+    vizTimeWindow: document.getElementById("vizTimeWindow"),
+    vizBasemap: document.getElementById("vizBasemap"),
+    vizResetBtn: document.getElementById("vizResetBtn"),
+    ageLegend: document.getElementById("ageLegend"),
+    legendBar: document.getElementById("legendBar"),
   };
 
   function renderRepoLabel(){
@@ -231,25 +332,87 @@
     return { header: rows[0], rows: rows.slice(1) };
   }
 
+  // ------------------------------------------------------- strike aging
+  // A strike's "freshness" bucket, matching the reference color ramp the
+  // user provided. Used for both the map dot color (when "color by strike
+  // age" is on) and the "last N minutes" filter. Unknown/unparseable
+  // timestamps get treated as "age unknown" rather than crashing anything.
+  var AGE_BUCKETS = [
+    { max: 5,  color: "#FFFFFF" },
+    { max: 10, color: "#FFF2B2" },
+    { max: 15, color: "#FFE564" },
+    { max: 25, color: "#FFD817" },
+    { max: 30, color: "#EEC10C" },
+    { max: 35, color: "#D6A61E" },
+    { max: 40, color: "#BE8A2F" },
+    { max: 45, color: "#A27035" },
+    { max: 50, color: "#80572A" },
+    { max: 55, color: "#5D3D1E" },
+    { max: 60, color: "#3B2412" },
+  ];
+  function colorForAge(ageMin){
+    if (ageMin == null || !isFinite(ageMin) || ageMin < 0) return "#ffd166"; // unknown/odd age -> fall back to the old default accent color
+    for (var i = 0; i < AGE_BUCKETS.length; i++){
+      if (ageMin <= AGE_BUCKETS[i].max) return AGE_BUCKETS[i].color;
+    }
+    return AGE_BUCKETS[AGE_BUCKETS.length - 1].color; // older than 60min -> darkest bucket
+  }
+  function buildLegendGradient(){
+    var n = AGE_BUCKETS.length;
+    var stops = AGE_BUCKETS.map(function(b, i){
+      return b.color + " " + ((i / (n - 1)) * 100).toFixed(1) + "%";
+    }).join(", ");
+    return "linear-gradient(to right, " + stops + ")";
+  }
+  el.legendBar.style.background = buildLegendGradient();
+
+  // PAGASA's "timestamp" field format isn't strictly documented, so this
+  // tries a normal Date.parse() first (handles ISO 8601 with T/Z fine),
+  // then falls back to treating a bare "YYYY-MM-DD HH:MM:SS"-style string
+  // as UTC. Returns null (== "age unknown") rather than throwing if
+  // neither works.
+  function parseStrikeTime(str){
+    if (!str) return null;
+    var t = Date.parse(str);
+    if (!isNaN(t)) return t;
+    var alt = Date.parse(String(str).replace(" ", "T") + "Z");
+    if (!isNaN(alt)) return alt;
+    return null;
+  }
+
   // ---------------------------------------------------------------- map
   // Wrapped in try/catch so a Leaflet load failure (CDN hiccup, blocked by
   // something on the viewer's end) degrades to "no map" instead of
   // crashing the whole page before it ever gets to loading real data --
   // that used to be indistinguishable from the page just being stuck.
+  // Free, no-API-key tile sources only -- anything needing a key (Mapbox,
+  // Google, etc.) would mean asking the user to manage credentials just to
+  // change the map's look, not worth it for a display-only toggle.
+  var BASEMAPS = {
+    osm: { url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors" },
+    dark: { url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", maxZoom: 20, subdomains: "abcd",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+    light: { url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", maxZoom: 20, subdomains: "abcd",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO" },
+    topo: { url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", maxZoom: 17,
+      attribution: "Map data: &copy; OpenStreetMap contributors, SRTM &mdash; map style: &copy; OpenTopoMap (CC-BY-SA)" },
+    satellite: { url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", maxZoom: 19,
+      attribution: "Tiles &copy; Esri" },
+  };
   var mapAvailable = true;
-  var map, markerLayer;
+  var map, currentTileLayer;
+
+  function setBasemap(key){
+    if (!mapAvailable) return;
+    var def = BASEMAPS[key] || BASEMAPS.osm;
+    if (currentTileLayer) map.removeLayer(currentTileLayer);
+    currentTileLayer = L.tileLayer(def.url, { maxZoom: def.maxZoom, subdomains: def.subdomains || "abc", attribution: def.attribution }).addTo(map);
+  }
+
   try {
-    map = L.map("map", { worldCopyJump: false, preferCanvas: true }).setView([12.5, 122.0], 6); // Philippines
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
-    // preferCanvas: true (above) makes circleMarkers draw on one shared
-    // <canvas> instead of each getting its own SVG <path> DOM node -- with
-    // thousands of strikes in a single segment (panahon during an active
-    // storm easily exceeds MAX_MARKERS' old 3000 cap), plain SVG rendering
-    // visibly bogs the browser down; canvas stays smooth well past 20k.
-    markerLayer = L.layerGroup().addTo(map);
+    map = L.map("map", { worldCopyJump: false }).setView([12.5, 122.0], 6); // Philippines
+    setBasemap(loadVizSettings().basemap); // loadVizSettings() is a hoisted function declaration, safe to call this early
   } catch (e) {
     mapAvailable = false;
     console.error("Leaflet failed to initialize -- map disabled, table view still works.", e);
@@ -263,9 +426,183 @@
     }
   }
 
-  function plotStrikes(header, rows){
+  // ---------------------------------------------------- shape rendering
+  // Strikes are drawn on a single plain <canvas> we manage ourselves,
+  // positioned/resized the same way Leaflet positions its own overlay
+  // panes (so panning/zooming stays correctly aligned). This is what lets
+  // "point symbol" support shapes beyond a circle (Leaflet's own
+  // CircleMarker can only ever be a circle) while still comfortably
+  // handling tens of thousands of points -- individual DOM/SVG nodes per
+  // shape would bog the browser down at panahon's storm-day volumes.
+  var shapeCanvas = null, shapeCtx = null, canvasOrigin = null;
+  var plottedPoints = []; // [{lat, lon, color, label}], already filtered/capped
+
+  function initShapeCanvas(){
+    if (!mapAvailable) return;
+    shapeCanvas = L.DomUtil.create("canvas", "shape-canvas-layer", map.getPanes().overlayPane);
+    shapeCanvas.style.pointerEvents = "none"; // clicks are handled via the map's own click event below, not this canvas directly
+    shapeCtx = shapeCanvas.getContext("2d");
+    map.on("moveend zoomend resize", resetShapeCanvas);
+    map.on("click", onMapClickForPopup);
+    resetShapeCanvas();
+  }
+
+  function resetShapeCanvas(){
+    if (!shapeCanvas) return;
+    canvasOrigin = map.containerPointToLayerPoint([0, 0]);
+    L.DomUtil.setPosition(shapeCanvas, canvasOrigin);
+    var size = map.getSize();
+    shapeCanvas.width = size.x;
+    shapeCanvas.height = size.y;
+    redrawShapes();
+  }
+
+  function readVizSettings(){
+    return {
+      symbol: el.vizSymbol.value,
+      outline: el.vizOutline.checked,
+      size: parseFloat(el.vizSize.value) || 5,
+      opacity: parseFloat(el.vizOpacity.value) || 100, // 0-100, matching the slider/what gets persisted -- converted to a 0-1 alpha only at the point it's actually drawn
+      colorByAge: el.vizColorByAge.checked,
+      fixedColor: el.vizFixedColor.value || "#ffd166",
+      timeWindow: el.vizTimeWindow.value,
+      basemap: el.vizBasemap.value,
+    };
+  }
+
+  function drawStarPath(ctx, cx, cy, outerR, innerR, points){
+    ctx.beginPath();
+    for (var i = 0; i < points * 2; i++){
+      var r = (i % 2 === 0) ? outerR : innerR;
+      var ang = (Math.PI / points) * i - Math.PI / 2;
+      var px = cx + r * Math.cos(ang), py = cy + r * Math.sin(ang);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+
+  function drawBoltPath(ctx, cx, cy, r){
+    var s = r / 6;
+    ctx.beginPath();
+    ctx.moveTo(cx + s * 1.2, cy - s * 6);
+    ctx.lineTo(cx - s * 3.0, cy + s * 0.5);
+    ctx.lineTo(cx - s * 0.4, cy + s * 0.5);
+    ctx.lineTo(cx - s * 1.2, cy + s * 6);
+    ctx.lineTo(cx + s * 3.0, cy - s * 1.0);
+    ctx.lineTo(cx + s * 0.4, cy - s * 1.0);
+    ctx.closePath();
+  }
+
+  function drawShape(ctx, symbol, cx, cy, r, color, alpha, outline){
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (symbol === "cross" || symbol === "x"){
+      ctx.lineCap = "round";
+      var d = symbol === "x" ? r * 0.75 : r;
+      if (outline){
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = Math.max(2.2, r * 0.85);
+        ctx.strokeStyle = "#000";
+        ctx.beginPath();
+        if (symbol === "cross"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); ctx.moveTo(cx, cy - d); ctx.lineTo(cx, cy + d); }
+        else { ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); }
+        ctx.stroke();
+        ctx.globalAlpha = alpha;
+      }
+      ctx.lineWidth = Math.max(1.3, r * 0.5);
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      if (symbol === "cross"){ ctx.moveTo(cx - d, cy); ctx.lineTo(cx + d, cy); ctx.moveTo(cx, cy - d); ctx.lineTo(cx, cy + d); }
+      else { ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    switch (symbol){
+      case "square":
+        ctx.beginPath(); ctx.rect(cx - r, cy - r, r * 2, r * 2); ctx.closePath();
+        break;
+      case "triangle":
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r);
+        ctx.lineTo(cx + r * 0.87, cy + r * 0.5);
+        ctx.lineTo(cx - r * 0.87, cy + r * 0.5);
+        ctx.closePath();
+        break;
+      case "diamond":
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy);
+        ctx.closePath();
+        break;
+      case "star":
+        drawStarPath(ctx, cx, cy, r, r * 0.45, 5);
+        break;
+      case "bolt":
+        drawBoltPath(ctx, cx, cy, r);
+        break;
+      case "circle":
+      default:
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath();
+        break;
+    }
+    ctx.fillStyle = color;
+    ctx.fill();
+    if (outline){
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = "#000";
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function redrawShapes(){
+    if (!shapeCtx || !canvasOrigin) return;
+    shapeCtx.clearRect(0, 0, shapeCanvas.width, shapeCanvas.height);
+    var vs = readVizSettings();
+    for (var i = 0; i < plottedPoints.length; i++){
+      var p = plottedPoints[i];
+      var lp = map.latLngToLayerPoint([p.lat, p.lon]);
+      var cx = lp.x - canvasOrigin.x, cy = lp.y - canvasOrigin.y;
+      if (cx < -30 || cy < -30 || cx > shapeCanvas.width + 30 || cy > shapeCanvas.height + 30) continue;
+      drawShape(shapeCtx, vs.symbol, cx, cy, vs.size, p.color, vs.opacity / 100, vs.outline);
+    }
+  }
+
+  function onMapClickForPopup(e){
+    if (!plottedPoints.length) return;
+    var vs = readVizSettings();
+    var hitR = vs.size + (vs.outline ? 2 : 0) + 6; // a little extra tap/click tolerance
+    var best = null, bestDist = hitR;
+    for (var i = 0; i < plottedPoints.length; i++){
+      var p = plottedPoints[i];
+      var cp = map.latLngToContainerPoint([p.lat, p.lon]);
+      var dx = cp.x - e.containerPoint.x, dy = cp.y - e.containerPoint.y;
+      var dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= bestDist){ bestDist = dist; best = p; }
+    }
+    if (best) L.popup().setLatLng([best.lat, best.lon]).setContent(best.label).openOn(map);
+  }
+
+  if (mapAvailable) initShapeCanvas();
+
+  function escapeHtml(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
+      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+
+  // ------------------------------------------------- map data <-> style
+  var lastHeader = [], lastRows = [];
+
+  // Rebuilds `plottedPoints` from the currently-loaded segment using
+  // whatever the map style controls are set to right now (symbol, color
+  // mode, time window, etc.), then redraws. `fitView` is true only when
+  // this is a genuinely new segment being loaded -- toggling a style
+  // control should restyle in place, never yank the map's pan/zoom around.
+  function computeAndPlot(fitView){
     if (!mapAvailable){ el.statPlotted.textContent = "map unavailable"; return; }
-    markerLayer.clearLayers();
+    var header = lastHeader, rows = lastRows;
     var latIdx = header.indexOf("latitude");
     var lonIdx = header.indexOf("longitude");
     var typeIdx = header.indexOf("type");
@@ -279,39 +616,122 @@
     var heightIdx = header.indexOf("height_m");
     var sensorsIdx = header.indexOf("num_sensors");
     var tsIdx = header.indexOf("timestamp");
+
+    var vs = readVizSettings();
+    el.ageLegend.classList.toggle("hiddenLegend", !vs.colorByAge);
+    el.vizFixedColor.style.visibility = vs.colorByAge ? "hidden" : "visible";
+
     if (latIdx === -1 || lonIdx === -1){
       el.statPlotted.textContent = "n/a";
+      plottedPoints = [];
+      redrawShapes();
       return;
     }
-    var plotted = 0;
-    var bounds = [];
-    for (var i = 0; i < rows.length && plotted < MAX_MARKERS; i++){
+
+    var windowMs = vs.timeWindow === "all" ? null : parseFloat(vs.timeWindow) * 60000;
+    var now = Date.now();
+    var candidates = [];
+    for (var i = 0; i < rows.length; i++){
       var lat = parseFloat(rows[i][latIdx]);
       var lon = parseFloat(rows[i][lonIdx]);
       if (!isFinite(lat) || !isFinite(lon)) continue;
+      var tsRaw = tsIdx > -1 ? rows[i][tsIdx] : null;
+      var tMs = tsRaw ? parseStrikeTime(tsRaw) : null;
+      var ageMin = tMs != null ? (now - tMs) / 60000 : null;
+      if (windowMs != null && (ageMin == null || (now - tMs) > windowMs)) continue; // rows with an unreadable timestamp are excluded once a time filter is active, since we can't confirm they'd qualify
+
       var label = "";
-      if (tsIdx > -1) label += "<b>" + escapeHtml(rows[i][tsIdx]) + "</b><br>";
+      if (tsRaw) label += "<b>" + escapeHtml(tsRaw) + "</b><br>";
       if (typeIdx > -1) label += escapeHtml(rows[i][typeIdx]) + " ";
       if (ampIdx > -1) label += escapeHtml(rows[i][ampIdx]) + ampUnit;
       if (heightIdx > -1 && rows[i][heightIdx]) label += " · " + escapeHtml(rows[i][heightIdx]) + "m";
       if (sensorsIdx > -1 && rows[i][sensorsIdx]) label += " · " + escapeHtml(rows[i][sensorsIdx]) + " sensors";
-      L.circleMarker([lat, lon], {
-        radius: 5, weight: 1, color: "#ffd166", fillColor: "#ffd166", fillOpacity: 0.55,
-      }).bindPopup(label || (lat + ", " + lon)).addTo(markerLayer);
-      bounds.push([lat, lon]);
-      plotted++;
+
+      candidates.push({
+        lat: lat, lon: lon,
+        color: vs.colorByAge ? colorForAge(ageMin) : vs.fixedColor,
+        label: label || (lat + ", " + lon),
+      });
     }
-    el.statPlotted.textContent = plotted + (rows.length > MAX_MARKERS ? " (capped)" : "");
-    if (bounds.length) map.fitBounds(bounds, { maxZoom: 9, padding: [20, 20] });
+
+    var capped = candidates.length > MAX_MARKERS;
+    plottedPoints = capped ? candidates.slice(0, MAX_MARKERS) : candidates;
+
+    var note = "";
+    if (capped) note = " (capped)";
+    else if (windowMs != null && candidates.length < rows.length) note = " (filtered)";
+    el.statPlotted.textContent = plottedPoints.length + note;
+
+    resetShapeCanvas();
+    if (fitView && plottedPoints.length){
+      map.fitBounds(plottedPoints.map(function(p){ return [p.lat, p.lon]; }), { maxZoom: 9, padding: [20, 20] });
+    }
   }
 
-  function escapeHtml(s){
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){
-      return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
-    });
+  // ----------------------------------------------------- style controls
+  var VIZ_DEFAULTS = { symbol: "circle", outline: true, size: 5, opacity: 100, colorByAge: true, fixedColor: "#ffd166", timeWindow: "all", basemap: "osm" };
+
+  function applyVizToControls(v){
+    el.vizBasemap.value = v.basemap || "osm"; // just syncs the dropdown -- the map's actual tile layer is set separately (at init, and on user change below) to avoid recreating it on every unrelated restyle
+    el.vizSymbol.value = v.symbol;
+    el.vizOutline.checked = !!v.outline;
+    el.vizSize.value = v.size;
+    el.vizSizeVal.textContent = v.size + " px";
+    el.vizOpacity.value = v.opacity;
+    el.vizOpacityVal.textContent = v.opacity + "%";
+    el.vizColorByAge.checked = !!v.colorByAge;
+    el.vizFixedColor.value = v.fixedColor;
+    el.vizTimeWindow.value = v.timeWindow;
+    el.vizFixedColor.style.visibility = v.colorByAge ? "hidden" : "visible";
+    el.ageLegend.classList.toggle("hiddenLegend", !v.colorByAge);
   }
+
+  function loadVizSettings(){
+    try {
+      var saved = JSON.parse(localStorage.getItem(VIZ_STORAGE_KEY) || "null");
+      if (saved) return Object.assign({}, VIZ_DEFAULTS, saved);
+    } catch (e) { /* ignore -- fall back to defaults */ }
+    return Object.assign({}, VIZ_DEFAULTS);
+  }
+
+  function saveVizSettings(){
+    try { localStorage.setItem(VIZ_STORAGE_KEY, JSON.stringify(readVizSettings())); }
+    catch (e) { /* private browsing etc. -- fine, just won't persist */ }
+  }
+
+  applyVizToControls(loadVizSettings());
+
+  function onVizChange(){
+    el.vizSizeVal.textContent = el.vizSize.value + " px";
+    el.vizOpacityVal.textContent = el.vizOpacity.value + "%";
+    el.vizFixedColor.style.visibility = el.vizColorByAge.checked ? "hidden" : "visible";
+    saveVizSettings();
+    computeAndPlot(false);
+  }
+  [el.vizSymbol, el.vizOutline, el.vizSize, el.vizOpacity, el.vizColorByAge, el.vizFixedColor, el.vizTimeWindow]
+    .forEach(function(control){
+      control.addEventListener("input", onVizChange);
+      control.addEventListener("change", onVizChange);
+    });
+  el.vizBasemap.addEventListener("change", function(){
+    setBasemap(el.vizBasemap.value);
+    saveVizSettings();
+  });
+
+  el.vizToggleBtn.addEventListener("click", function(){
+    el.vizPanel.hidden = !el.vizPanel.hidden;
+    el.vizToggleBtn.classList.toggle("active", !el.vizPanel.hidden);
+  });
+  el.vizResetBtn.addEventListener("click", function(){
+    applyVizToControls(VIZ_DEFAULTS);
+    setBasemap(VIZ_DEFAULTS.basemap);
+    saveVizSettings();
+    computeAndPlot(false);
+  });
 
   // -------------------------------------------------------------- table
+  // Unaffected by the map style controls above by design -- always shows
+  // every row in the loaded segment, regardless of the map's time filter.
   function renderTable(header, rows){
     if (!rows.length){
       el.tableHost.className = "empty";
@@ -385,6 +805,8 @@
       })
       .then(function(text){
         var parsed = parseCSV(text);
+        lastHeader = parsed.header;
+        lastRows = parsed.rows;
         el.statCount.textContent = parsed.rows.length;
         var tsIdx = parsed.header.indexOf("timestamp");
         if (tsIdx > -1 && parsed.rows.length){
@@ -392,7 +814,7 @@
         } else {
           el.statRange.textContent = "—";
         }
-        plotStrikes(parsed.header, parsed.rows);
+        computeAndPlot(true);
         renderTable(parsed.header, parsed.rows);
       })
       .catch(function(err){
