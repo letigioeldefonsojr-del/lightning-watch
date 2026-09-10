@@ -209,7 +209,11 @@
        own delete page for that one file. -->
   <div class="filesPanel" id="filesPanel" hidden>
     <div class="vizTitle">All saved segments (data/lightning/)
-      <span style="margin-left:auto; display:flex; gap:12px;">
+      <span style="margin-left:auto; display:flex; align-items:center; gap:12px;">
+        <select id="filesSortOrder" style="padding:3px 6px; font-size:.75rem;">
+          <option value="desc">Newest first</option>
+          <option value="asc">Oldest first</option>
+        </select>
         <button type="button" id="filesReloadBtn" class="linklike" title="Re-check every file and drop any you've deleted on GitHub since this list last loaded">&#8635; reload</button>
         <button type="button" id="filesBodyToggle" class="linklike">&#9662; hide</button>
       </span>
@@ -324,6 +328,7 @@
     filesPanel: document.getElementById("filesPanel"),
     filesBodyToggle: document.getElementById("filesBodyToggle"),
     filesReloadBtn: document.getElementById("filesReloadBtn"),
+    filesSortOrder: document.getElementById("filesSortOrder"),
     filesBody: document.getElementById("filesBody"),
     filesListHost: document.getElementById("filesListHost"),
     settingsBtn: document.getElementById("settingsBtn"),
@@ -953,19 +958,35 @@
       });
   }
 
+  // The most recently rendered file list, kept around so flipping the sort
+  // order (below) can just re-sort it instantly instead of re-fetching or
+  // re-running the reload button's per-file existence check.
+  var filesLastList = null;
+
   // Every segment ever saved (unlike populateSelect() above, which caps at
   // the 10 most recent) -- this is the "Files" panel's list, rebuilt each
   // time that panel is opened or the index refreshes while it's open.
   // filesOverride lets reloadFilesList() below hand it an already-verified
   // (deleted files filtered out) list instead of the raw index.json one.
   function renderAllSegments(filesOverride){
+    // Defaults to the fresh index.json list -- filesLastList is only ever
+    // used when the sort-order dropdown explicitly asks to re-sort exactly
+    // what's currently shown (which matters right after Reload, so a
+    // deleted-and-filtered-out file doesn't reappear just from flipping
+    // sort order before the next real refresh).
     var files = filesOverride || (indexData && indexData.files) || [];
+    filesLastList = files;
     el.filesListHost.innerHTML = "";
     if (!files.length){
       el.filesListHost.textContent = "No segments saved yet.";
       return;
     }
-    for (var i = files.length - 1; i >= 0; i--){
+    // `files` is already in true chronological (oldest -> newest) order, as
+    // written by watch_and_commit.py -- "Newest first" is just that order
+    // reversed, "Oldest first" is the order as-is.
+    var ascending = el.filesSortOrder && el.filesSortOrder.value === "asc";
+    var ordered = ascending ? files : files.slice().reverse();
+    ordered.forEach(function(f){
       (function(f){
         var row = document.createElement("div");
         row.className = "fileRow";
@@ -1000,8 +1021,8 @@
         row.appendChild(metaEl);
         row.appendChild(btns);
         el.filesListHost.appendChild(row);
-      })(files[i]);
-    }
+      })(f);
+    });
   }
 
   // A plain re-fetch of index.json isn't actually enough to make a just-
@@ -1055,6 +1076,7 @@
     el.filesBodyToggle.innerHTML = (el.filesBody.hidden ? "&#9656; show" : "&#9662; hide");
   });
   el.filesReloadBtn.addEventListener("click", reloadFilesList);
+  el.filesSortOrder.addEventListener("change", function(){ renderAllSegments(filesLastList); }); // re-sorts whatever's currently shown, no re-fetch
 
   function loadSegment(name){
     currentFile = name;
