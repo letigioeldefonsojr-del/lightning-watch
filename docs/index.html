@@ -77,6 +77,7 @@
   .btnlike:hover, .fileRow button:hover{border-color:var(--accent-2);}
   .btnlike.danger:hover{border-color:var(--danger); color:var(--danger);}
   .filesPanel .vizTitle{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  #filesBody{display:flex; flex-direction:column; gap:10px;}
   .linklike{
     background:none; border:none; padding:0; color:var(--accent-2); cursor:pointer;
     font-size:.72rem; text-transform:none; letter-spacing:normal; font-weight:400;
@@ -207,17 +208,19 @@
        own delete page for that one file. -->
   <div class="filesPanel" id="filesPanel" hidden>
     <div class="vizTitle">All saved segments (data/lightning/)
-      <button type="button" id="filesNoteToggle" class="linklike">&#9656; why no delete button here?</button>
+      <button type="button" id="filesBodyToggle" class="linklike">&#9662; hide</button>
     </div>
-    <div class="sub" id="filesNote" hidden>
-      Download saves the file straight from here. Delete opens GitHub's own
-      delete page for that file instead of deleting it directly from this
-      page -- a real delete button here would need a repo-write key baked
-      into this public page, which anyone who opened it could copy and use
-      to wipe your data, so this dashboard doesn't do that. You'll need to
-      be signed in to GitHub with access to this repo for delete to work.
+    <div id="filesBody">
+      <div class="sub">
+        Download saves the file straight from here. Delete opens GitHub's own
+        delete page for that file instead of deleting it directly from this
+        page -- a real delete button here would need a repo-write key baked
+        into this public page, which anyone who opened it could copy and use
+        to wipe your data, so this dashboard doesn't do that. You'll need to
+        be signed in to GitHub with access to this repo for delete to work.
+      </div>
+      <div class="filesListWrap" id="filesListHost">Loading&hellip;</div>
     </div>
-    <div class="filesListWrap" id="filesListHost">Loading&hellip;</div>
   </div>
 
   <div id="map"></div>
@@ -315,8 +318,8 @@
     refreshBtn: document.getElementById("refreshBtn"),
     filesToggleBtn: document.getElementById("filesToggleBtn"),
     filesPanel: document.getElementById("filesPanel"),
-    filesNoteToggle: document.getElementById("filesNoteToggle"),
-    filesNote: document.getElementById("filesNote"),
+    filesBodyToggle: document.getElementById("filesBodyToggle"),
+    filesBody: document.getElementById("filesBody"),
     filesListHost: document.getElementById("filesListHost"),
     settingsBtn: document.getElementById("settingsBtn"),
     statCount: document.getElementById("statCount"),
@@ -999,9 +1002,9 @@
     el.filesToggleBtn.classList.toggle("active", !el.filesPanel.hidden);
     if (!el.filesPanel.hidden) renderAllSegments(); // always fresh on open
   });
-  el.filesNoteToggle.addEventListener("click", function(){
-    el.filesNote.hidden = !el.filesNote.hidden;
-    el.filesNoteToggle.innerHTML = (el.filesNote.hidden ? "&#9656;" : "&#9662;") + " why no delete button here?";
+  el.filesBodyToggle.addEventListener("click", function(){
+    el.filesBody.hidden = !el.filesBody.hidden;
+    el.filesBodyToggle.innerHTML = (el.filesBody.hidden ? "&#9656; show" : "&#9662; hide");
   });
 
   function loadSegment(name){
