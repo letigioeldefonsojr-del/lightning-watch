@@ -111,7 +111,17 @@ def git_commit_and_push(outdir: Path, branch: str, message: str) -> bool:
 
     for attempt in range(1, 4):
         sh(["git", "fetch", "origin", branch])
-        rebase = sh(["git", "rebase", f"origin/{branch}"])
+        # --autostash: the watch subprocess keeps appending rows to the CSV
+        # in the background the whole time this function runs (it's never
+        # paused for a checkpoint), so by the time we get here -- after our
+        # own commit above -- the working tree is often already dirty again
+        # with rows written since that commit. A plain `git rebase` refuses
+        # to run at all against a dirty tree ("cannot rebase: you have
+        # unstaged changes") and the whole checkpoint gets thrown away.
+        # --autostash sets those in-progress writes aside before rebasing
+        # and reapplies them right after, so a still-running watcher no
+        # longer blocks every single checkpoint.
+        rebase = sh(["git", "rebase", "--autostash", f"origin/{branch}"])
         if rebase.returncode != 0:
             # Something else pushed to this branch and now conflicts with
             # our change (very unlikely -- this workflow is the only
