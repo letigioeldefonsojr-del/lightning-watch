@@ -78,6 +78,7 @@
   .btnlike.danger:hover{border-color:var(--danger); color:var(--danger);}
   .filesPanel .vizTitle{display:flex; align-items:center; justify-content:space-between; gap:10px;}
   #filesBody{display:flex; flex-direction:column; gap:10px;}
+  #filesBody[hidden]{display:none;} /* the plain #filesBody{display:flex} rule above otherwise outranks the browser's own [hidden]{display:none} rule and the toggle silently stops hiding anything */
   .linklike{
     background:none; border:none; padding:0; color:var(--accent-2); cursor:pointer;
     font-size:.72rem; text-transform:none; letter-spacing:normal; font-weight:400;
