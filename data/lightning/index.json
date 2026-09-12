@@ -1,71 +1,6 @@
 {
   "files": [
     {
-      "name": "panahon_lightning_split60min_Sep_12_2026_1201PM.csv",
-      "row_count": 3535,
-      "size_bytes": 279604
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0101PM.csv",
-      "row_count": 6361,
-      "size_bytes": 503897
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0201PM.csv",
-      "row_count": 11141,
-      "size_bytes": 883528
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0301PM.csv",
-      "row_count": 8946,
-      "size_bytes": 711474
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0401PM.csv",
-      "row_count": 7111,
-      "size_bytes": 563709
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0501PM.csv",
-      "row_count": 4897,
-      "size_bytes": 389918
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0601PM.csv",
-      "row_count": 2920,
-      "size_bytes": 232689
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0701PM.csv",
-      "row_count": 2207,
-      "size_bytes": 175433
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0801PM.csv",
-      "row_count": 1297,
-      "size_bytes": 103027
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_0901PM.csv",
-      "row_count": 2188,
-      "size_bytes": 173220
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_1001PM.csv",
-      "row_count": 2797,
-      "size_bytes": 221707
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_12_2026_1101PM.csv",
-      "row_count": 2478,
-      "size_bytes": 196539
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_1201AM.csv",
-      "row_count": 2381,
-      "size_bytes": 189474
-    },
-    {
       "name": "panahon_lightning_split60min_Sep_13_2026_0101AM.csv",
       "row_count": 2182,
       "size_bytes": 173713
@@ -77,9 +12,9 @@
     },
     {
       "name": "panahon_lightning_split60min_Sep_13_2026_0601AM.csv",
-      "row_count": 922,
-      "size_bytes": 73545
+      "row_count": 1223,
+      "size_bytes": 97532
     }
   ],
-  "generated_at": "2026-09-12T22:21:27.112796+00:00"
+  "generated_at": "2026-09-12T22:31:28.456039+00:00"
 }
