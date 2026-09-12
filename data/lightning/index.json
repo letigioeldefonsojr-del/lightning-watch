@@ -79,7 +79,12 @@
       "name": "panahon_lightning_split60min_Sep_12_2026_0301PM.csv",
       "row_count": 8946,
       "size_bytes": 711474
+    },
+    {
+      "name": "panahon_lightning_split60min_Sep_12_2026_0401PM.csv",
+      "row_count": 49,
+      "size_bytes": 3936
     }
   ],
-  "generated_at": "2026-09-12T07:51:22.196858+00:00"
+  "generated_at": "2026-09-12T08:01:24.075211+00:00"
 }
