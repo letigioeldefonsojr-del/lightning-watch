@@ -1109,7 +1109,15 @@ def watch_lightning_panahon(
         return sio, connect_error_reason
 
     print(f"Connecting to panahon.gov.ph's live lightning feed ({url}) ...")
-    sio = _panahon_connect_with_retries(build_client, url, stop_event=stop_event, retries=5, retry_delay=15)
+    # retries=30, retry_delay=30 -> up to ~15 minutes of retrying the INITIAL
+    # connection before giving up (was retries=5/delay=15 -- only ~90s total,
+    # which isn't long enough to ride out a genuinely temporary PAGASA outage
+    # or network hiccup; a run that gives up that fast just fails the whole
+    # job for something that would've cleared up on its own). 30s between
+    # attempts matches this file's own reconnection_delay/_max below for a
+    # connection that drops mid-watch (which already retries indefinitely --
+    # this is only about getting connected in the first place).
+    sio = _panahon_connect_with_retries(build_client, url, stop_event=stop_event, retries=30, retry_delay=30)
 
     if split_minutes:
         print(
