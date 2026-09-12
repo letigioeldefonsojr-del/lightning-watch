@@ -61,7 +61,7 @@ Go to the repo's **Actions** tab on GitHub. You should see "Lightning watch
    appearing with new files under `data/lightning/`.
 
 Once you've confirmed it works, real runs (started by the external
-scheduler set up in step 5 below) use the default 170 minutes (2h50m)
+scheduler set up in step 5 below) use the default 178 minutes (2h58m)
 automatically — you don't need to touch `max_minutes` for those.
 
 ### 4. Turn on the dashboard (GitHub Pages)
@@ -116,8 +116,11 @@ schedule instead — a plain API request, not GitHub's own best-effort cron.
      - `X-GitHub-Api-Version: 2022-11-28`
    - **Request body** (raw JSON):
      ```json
-     {"ref": "main", "inputs": {"max_minutes": "170"}}
+     {"ref": "main", "inputs": {"max_minutes": "178"}}
      ```
+     (If you already have this cronjob set up from before with `"170"` in
+     the body, edit it on cron-job.org and change that to `"178"` — this
+     repo change alone doesn't update anything you already saved there.)
    - Save it. A successful call gets back an empty response with status
      `204` — that's correct, not an error; you can confirm it worked by
      checking the repo's Actions tab for a new run right after the
@@ -159,8 +162,8 @@ schedule instead — a plain API request, not GitHub's own best-effort cron.
 ## Why a single job can't just run forever
 
 GitHub caps every individual job at **6 hours**. `watch_and_commit.py`
-stops the watcher cleanly (same as pressing Ctrl+C) after 170 minutes
-(2h50m), commits one last time, and exits. The external scheduler
+stops the watcher cleanly (same as pressing Ctrl+C) after 178 minutes
+(2h58m), commits one last time, and exits. The external scheduler
 (cron-job.org, step 5 above) then starts a brand new run every 3 hours,
 which picks up right where the last one left off.
 
@@ -192,18 +195,17 @@ around that.
 
 ### Two smaller gaps
 
-1. **The ~10-minute handoff itself.** Each run stops 10 minutes before the
-   next one starts (2h50m watch + a 3h cadence), so there's a short window
+1. **The ~2-minute handoff itself.** Each run stops 2 minutes before the
+   next one starts (2h58m watch + a 3h cadence), so there's a short window
    at each restart where nothing is being collected. PAGASA's own feed only
    ever shows a short recent rolling window (no way to ask it for history),
-   so this is a real, if small, loss — not just a display glitch.
+   so this is a real, if small, loss — not just a display glitch. (This was
+   a ~10-minute gap originally, narrowed to 2 minutes once the checkpoint
+   logic got more resilient to a still-running watcher overlapping with its
+   own commit -- see watch_and_commit.py's git_commit_and_push().)
 2. **Ordinary API/network delays.** An outside service calling GitHub's API
    can itself be a little late (seconds, occasionally a minute or two) —
    nothing to configure around, just don't expect second-perfect timing.
-
-If you later want to shrink the 10-minute gap itself, the fix is a shorter
-cadence (e.g. every 2h40m instead of 3h) at the cost of a bit more overlap
-risk — ask if you want that tuned.
 
 ## Currently using panahon.gov.ph (richer data, more fragile)
 

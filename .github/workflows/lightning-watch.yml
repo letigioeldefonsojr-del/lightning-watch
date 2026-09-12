@@ -20,12 +20,18 @@ name: Lightning watch (PAGASA)
 # contract again.
 #
 # GitHub Actions caps a single job at 6 hours, so this can't literally run
-# forever in one job. Instead each run watches for up to 170 minutes
-# (2h50m) via scripts/watch_and_commit.py, checkpoints (commits+pushes)
+# forever in one job. Instead each run watches for up to 178 minutes
+# (2h58m) via scripts/watch_and_commit.py, checkpoints (commits+pushes)
 # every 10 minutes along the way, then stops cleanly. The schedule below
 # starts a fresh run every 3 hours, so the next one picks up shortly after
-# the previous one stops -- in practice a small (~10 min) gap around each
-# handoff, not a hard cutoff of coverage.
+# the previous one stops -- in practice a small (~2 min) gap around each
+# handoff, not a hard cutoff of coverage. (This used to be a ~10min gap at
+# 170 minutes watched -- narrowed to 2min once the checkpoint/rebase logic
+# got more resilient. Job timeout-minutes below still keeps a full 5-minute
+# cleanup buffer *after* that 178min mark, same margin as before -- it just
+# now spills a little past the next scheduled restart in the rare worst
+# case, which only delays that next run's start slightly rather than
+# losing anything.)
 #
 # The restart times themselves (00:00/03:00/06:00/09:00/12:00/15:00/18:00/
 # 21:00 UTC below) are chosen to land exactly on 8AM/11AM/2PM/5PM/8PM/11PM/
@@ -60,9 +66,9 @@ on:
   workflow_dispatch:
     inputs:
       max_minutes:
-        description: 'Max minutes to run (leave as 170 for a real run; use something small like 5 to smoke-test)'
+        description: 'Max minutes to run (leave as 178 for a real run; use something small like 5 to smoke-test)'
         required: false
-        default: '170'
+        default: '178'
 
 # Never run two of these at once -- if a manual test run overlaps a
 # scheduled one, let the one already running finish rather than racing
@@ -77,10 +83,11 @@ permissions:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    # Slightly above the script's own --max-minutes so there's headroom
-    # for the final checkpoint commit+push, but still safely under the
-    # 180-minute (3h) gap between scheduled restarts below.
-    timeout-minutes: 175
+    # 5 minutes above the script's own --max-minutes -- headroom for the
+    # final checkpoint's commit+push. This now runs a little past the
+    # 180-minute (3h) gap between scheduled restarts; see the note near the
+    # top of this file for why that's fine.
+    timeout-minutes: 183
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
@@ -132,7 +139,7 @@ jobs:
           python scripts/watch_and_commit.py \
             --outdir data/lightning \
             --branch "${{ github.ref_name }}" \
-            --max-minutes "${{ github.event.inputs.max_minutes || '170' }}" \
+            --max-minutes "${{ github.event.inputs.max_minutes || '178' }}" \
             --commit-every-minutes 10 \
             --split 60 \
             --interval 60 \
