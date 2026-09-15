@@ -1,136 +1,6 @@
 {
   "files": [
     {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0101AM.csv",
-      "row_count": 2182,
-      "size_bytes": 173713
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0501AM.csv",
-      "row_count": 1364,
-      "size_bytes": 108315
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0601AM.csv",
-      "row_count": 2038,
-      "size_bytes": 162881
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0701AM.csv",
-      "row_count": 3457,
-      "size_bytes": 277158
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0801AM.csv",
-      "row_count": 1777,
-      "size_bytes": 142384
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0901AM.csv",
-      "row_count": 2537,
-      "size_bytes": 203438
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_1001AM.csv",
-      "row_count": 2742,
-      "size_bytes": 219969
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_1101AM.csv",
-      "row_count": 1679,
-      "size_bytes": 134201
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_1201PM.csv",
-      "row_count": 2966,
-      "size_bytes": 237616
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0101PM.csv",
-      "row_count": 6661,
-      "size_bytes": 533702
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0201PM.csv",
-      "row_count": 3286,
-      "size_bytes": 263233
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0301PM.csv",
-      "row_count": 4313,
-      "size_bytes": 345876
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0401PM.csv",
-      "row_count": 7869,
-      "size_bytes": 628551
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0608PM.csv",
-      "row_count": 6488,
-      "size_bytes": 516898
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0708PM.csv",
-      "row_count": 8769,
-      "size_bytes": 698379
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_0808PM.csv",
-      "row_count": 33,
-      "size_bytes": 2713
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_13_2026_1101PM.csv",
-      "row_count": 4761,
-      "size_bytes": 379428
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_1201AM.csv",
-      "row_count": 6412,
-      "size_bytes": 511135
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0101AM.csv",
-      "row_count": 9599,
-      "size_bytes": 764744
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0201AM.csv",
-      "row_count": 8548,
-      "size_bytes": 680250
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0301AM.csv",
-      "row_count": 9515,
-      "size_bytes": 755713
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0401AM.csv",
-      "row_count": 9467,
-      "size_bytes": 754414
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0501AM.csv",
-      "row_count": 6715,
-      "size_bytes": 536037
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0601AM.csv",
-      "row_count": 5780,
-      "size_bytes": 462462
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0701AM.csv",
-      "row_count": 4424,
-      "size_bytes": 352631
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_14_2026_0801AM.csv",
-      "row_count": 2927,
-      "size_bytes": 232267
-    },
-    {
       "name": "panahon_lightning_split60min_Sep_14_2026_0901AM.csv",
       "row_count": 1797,
       "size_bytes": 142571
@@ -262,9 +132,9 @@
     },
     {
       "name": "panahon_lightning_split60min_Sep_15_2026_1101AM.csv",
-      "row_count": 882,
-      "size_bytes": 70514
+      "row_count": 1066,
+      "size_bytes": 85109
     }
   ],
-  "generated_at": "2026-09-15T03:51:08.501483+00:00"
+  "generated_at": "2026-09-15T04:01:10.120471+00:00"
 }
