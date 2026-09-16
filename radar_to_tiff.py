@@ -986,7 +986,9 @@ def watch_lightning_panahon(
     outdir.mkdir(parents=True, exist_ok=True)
 
     def make_path(now: float) -> Path:
-        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%I%M%p")
+        # 24-hour HHMM (e.g. 1301 for 1:01 PM) -- was 12-hour + AM/PM (0101PM)
+        # before this line changed.
+        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%H%M")
         if split_minutes:
             return outdir / f"panahon_lightning_split{split_minutes}min_{stamp}.csv"
         elif window_minutes:
@@ -1266,7 +1268,9 @@ def watch_lightning(
     outdir.mkdir(parents=True, exist_ok=True)
 
     def make_path(now: float) -> Path:
-        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%I%M%p")
+        # 24-hour HHMM (e.g. 1301 for 1:01 PM) -- was 12-hour + AM/PM (0101PM)
+        # before this line changed.
+        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%H%M")
         if split_minutes:
             return outdir / f"pagasa_lightning_split{split_minutes}min_{stamp}.csv"
         elif window_minutes:
