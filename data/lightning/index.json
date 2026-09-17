@@ -1,71 +1,6 @@
 {
   "files": [
     {
-      "name": "panahon_lightning_split60min_Sep_16_2026_1801.csv",
-      "row_count": 8716,
-      "size_bytes": 696825
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_16_2026_1901.csv",
-      "row_count": 12236,
-      "size_bytes": 978396
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_16_2026_2001.csv",
-      "row_count": 7231,
-      "size_bytes": 575847
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_16_2026_2101.csv",
-      "row_count": 6042,
-      "size_bytes": 479311
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_16_2026_2201.csv",
-      "row_count": 6141,
-      "size_bytes": 486087
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_16_2026_2301.csv",
-      "row_count": 3403,
-      "size_bytes": 268689
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0001.csv",
-      "row_count": 3631,
-      "size_bytes": 287707
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0101.csv",
-      "row_count": 5482,
-      "size_bytes": 433856
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0201.csv",
-      "row_count": 4174,
-      "size_bytes": 329624
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0301.csv",
-      "row_count": 4732,
-      "size_bytes": 373747
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0401.csv",
-      "row_count": 3349,
-      "size_bytes": 263634
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0501.csv",
-      "row_count": 4204,
-      "size_bytes": 333624
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0601.csv",
-      "row_count": 5997,
-      "size_bytes": 478063
-    },
-    {
       "name": "panahon_lightning_split60min_Sep_17_2026_0701.csv",
       "row_count": 9399,
       "size_bytes": 746463
@@ -102,9 +37,9 @@
     },
     {
       "name": "panahon_lightning_split60min_Sep_17_2026_1401.csv",
-      "row_count": 7222,
-      "size_bytes": 577248
+      "row_count": 9082,
+      "size_bytes": 725635
     }
   ],
-  "generated_at": "2026-09-17T06:41:16.216868+00:00"
+  "generated_at": "2026-09-17T06:51:18.280075+00:00"
 }
