@@ -1,66 +1,6 @@
 {
   "files": [
     {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0701.csv",
-      "row_count": 9399,
-      "size_bytes": 746463
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0801.csv",
-      "row_count": 8852,
-      "size_bytes": 702738
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_0901.csv",
-      "row_count": 6848,
-      "size_bytes": 543310
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1001.csv",
-      "row_count": 6681,
-      "size_bytes": 529163
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1101.csv",
-      "row_count": 5027,
-      "size_bytes": 398798
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1201.csv",
-      "row_count": 7171,
-      "size_bytes": 572673
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1301.csv",
-      "row_count": 11288,
-      "size_bytes": 902681
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1401.csv",
-      "row_count": 9082,
-      "size_bytes": 725635
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1501.csv",
-      "row_count": 9130,
-      "size_bytes": 729386
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1601.csv",
-      "row_count": 11076,
-      "size_bytes": 884254
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1701.csv",
-      "row_count": 11212,
-      "size_bytes": 897420
-    },
-    {
-      "name": "panahon_lightning_split60min_Sep_17_2026_1801.csv",
-      "row_count": 8886,
-      "size_bytes": 706584
-    },
-    {
       "name": "panahon_lightning_split60min_Sep_17_2026_1901.csv",
       "row_count": 8713,
       "size_bytes": 694097
@@ -77,9 +17,9 @@
     },
     {
       "name": "panahon_lightning_split60min_Sep_17_2026_2201.csv",
-      "row_count": 1849,
-      "size_bytes": 146946
+      "row_count": 2548,
+      "size_bytes": 202421
     }
   ],
-  "generated_at": "2026-09-17T14:21:28.116869+00:00"
+  "generated_at": "2026-09-17T14:31:30.289106+00:00"
 }
