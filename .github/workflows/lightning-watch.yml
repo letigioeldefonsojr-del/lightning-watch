@@ -100,7 +100,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # --lightning-source panahon needs a real headless browser to fetch its
+      # --lightning-source panahon needs a real browser to fetch its
       # connection ticket (see radar_to_tiff.py's _require_playwright()
       # docstring for why) -- this downloads that browser onto the runner.
       # Remove this step if you switch --lightning-source back to pagasa
@@ -124,6 +124,18 @@ jobs:
           echo "::error::Failed to install Playwright's Chromium after 3 attempts."
           exit 1
 
+      # panahon.gov.ph started blocking Playwright's HEADLESS Chromium
+      # specifically at some point (confirmed live 2026-09-28 -- see
+      # PANAHON_BROWSER_HEADLESS's comment in radar_to_tiff.py) -- a
+      # visible/non-headless launch gets through fine, but this runner has
+      # no real display for it to open on. xvfb gives it a virtual one:
+      # `xvfb-run` below wraps the actual watch command, starting a fake
+      # X server just for that process and tearing it down after, so
+      # Chromium can launch non-headless exactly as radar_to_tiff.py now
+      # does by default without this runner needing a real screen.
+      - name: Install a virtual display (xvfb) for non-headless Chromium
+        run: sudo apt-get update && sudo apt-get install -y xvfb
+
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
@@ -134,9 +146,14 @@ jobs:
       # missing-intermediate-certificate server misconfiguration -- a real
       # browser tolerates it, Python's ssl module doesn't). See the
       # build_client() comments in radar_to_tiff.py for the full story.
+      #
+      # xvfb-run -a: runs the whole command under a virtual display (picks
+      # a free display number automatically, `-a`) instead of needing this
+      # runner to have a real screen -- see the "Install a virtual display"
+      # step above for why this is here now.
       - name: Watch panahon.gov.ph lightning feed (checkpointing every 10 min)
         run: |
-          python scripts/watch_and_commit.py \
+          xvfb-run -a python scripts/watch_and_commit.py \
             --outdir data/lightning \
             --branch "${{ github.ref_name }}" \
             --max-minutes "${{ github.event.inputs.max_minutes || '178' }}" \

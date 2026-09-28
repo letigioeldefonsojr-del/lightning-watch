@@ -85,13 +85,19 @@ work fine without them.
 panahon.gov.ph has a THIRD lightning mode too, its own "10-Minute
 Lightning" layer (separate from the "Realtime Lightning"/websocket one
 above) -- pass --lightning-source panahon-10min to use it. Unlike the
-websocket feed, this is a plain polled REST snapshot (like pagasa above),
-needs NO extra packages at all -- not python-socketio, not Playwright --
+websocket feed, this is a plain polled REST snapshot (like pagasa above)
 and gives a "right now" snapshot in one-shot mode rather than needing
---duration to listen. Its per-strike field names are inferred rather than
-confirmed against a real populated response (every live check so far
-happened to catch a quiet stretch); see PANAHON_LIGHTNING_REST_URL's
-comment in the source for the full story on what's confirmed vs. not.
+--duration to listen -- but it still needs the `playwright` package (see
+Requirements below), same as --lightning-source panahon does, just not
+python-socketio/websocket-client since this isn't the websocket path.
+(An earlier version of this claimed it needed no extra packages at all --
+that was wrong, confirmed directly: panahon.gov.ph blocks a plain
+`requests` call here exactly as thoroughly as the websocket ticket
+endpoint, not just that one specifically as first assumed.) Its
+per-strike field names are also inferred rather than confirmed against a
+real populated response (every live check so far happened to catch a
+quiet stretch); see PANAHON_LIGHTNING_REST_URL's comment in the source
+for the full story on what's confirmed vs. not.
 
 (A third source, meteologix.com, was evaluated and dropped -- its data was
 reachable, but sweeping its per-province pages got this script's IP
@@ -125,11 +131,12 @@ Requirements
 ------------
     pip install requests pillow numpy rasterio
     pip install "python-socketio[client]" websocket-client  # only for --lightning-source panahon
-    pip install playwright  # only for --lightning-source panahon (fetching its connection ticket --
-                             # panahon.gov.ph's ticket endpoint rejects scripted HTTP clients no
-                             # matter how closely they spoof a real browser's headers/TLS fingerprint,
-                             # so this drives an actual headless Chromium instead -- see
-                             # _require_playwright() and _fetch_panahon_ws_ticket() for the full story)
+    pip install playwright  # for --lightning-source panahon AND panahon-10min (every panahon.gov.ph
+                             # request, not just its connection ticket) -- panahon.gov.ph rejects
+                             # scripted HTTP clients no matter how closely they spoof a real browser's
+                             # headers/TLS fingerprint, so this drives an actual headless Chromium
+                             # instead -- see _require_playwright() and _fetch_panahon_ws_ticket() /
+                             # _fetch_panahon_lightning_frequency_via_browser() for the full story
     playwright install chromium  # one-time browser download playwright itself needs
 """
 
@@ -137,7 +144,6 @@ import argparse
 import csv
 import io
 import json
-import re
 import sys
 import threading
 import time
@@ -210,14 +216,26 @@ PANAHON_LIGHTNING_EVENT = "lx.data"
 # websocket for the live stream -- confirmed reachable the same way, but
 # not otherwise used here.
 #
-# CONFIRMED by hand, live, from inside an actual browser tab's own script
-# context (not a detached Python script): fetching this exact URL with
-# just the CSRF token returns a normal 200 response
-# (`{"success": true, "data": [...]}`, `data` empty when no strikes are
-# in the window) with NO sign of the bot/TLS-fingerprint blocking that
-# makes PANAHON_WS_TICKET_URL need the Playwright workaround below -- so
-# fetch_panahon_lightning_frequency() below uses plain `requests`, same as
-# every PAGASA endpoint elsewhere in this file, not Playwright.
+# CORRECTED (was wrong in an earlier version of this comment): this DOES
+# need the same Playwright workaround as PANAHON_WS_TICKET_URL, for the
+# same reason. The first version of this was tested by running a fetch()
+# call from inside an already-loaded real browser tab's own script
+# context, which returned a clean 200 -- but that's still a genuine
+# browser making the request under the hood, so it never actually tested
+# what a plain, detached HTTP client gets. CONFIRMED directly, twice, that
+# a plain client does NOT get through: once from a GitHub Actions runner
+# and once from an ordinary residential Windows connection running plain
+# `requests` -- both got blocked before ever seeing real HTML back from
+# just loading https://panahon.gov.ph/ (no <meta name="csrf-token"> tag
+# found; the GitHub Actions case specifically got served an `image/png`
+# response instead of the page). Whatever panahon.gov.ph's fingerprinting
+# is keying on, it's blocking this exactly as thoroughly as
+# PANAHON_WS_TICKET_URL -- see _require_playwright()'s docstring for the
+# long history of that discovery. So
+# _fetch_panahon_lightning_frequency_via_browser() below uses the exact
+# same approach as _fetch_panahon_ws_ticket(): drive a real headless
+# Chromium via Playwright and run the fetch from INSIDE that page, not a
+# detached `requests` call.
 #
 # NOT YET CONFIRMED: what a POPULATED `data` array looks like -- every
 # live check so far happened to catch a quiet stretch with zero strikes,
@@ -238,21 +256,40 @@ PANAHON_LIGHTNING_EVENT = "lx.data"
 # Worth re-confirming directly the first time this actually catches a
 # strike (compare the CSV output against what panahon.gov.ph's own map
 # shows for the same strike).
-#
-# ALSO NOT YET CONFIRMED: whether plain `requests` (as opposed to a real
-# browser) can be blocked here the same way PANAHON_WS_TICKET_URL was --
-# the in-browser test above only proves the request/response shape and
-# that a real browser isn't blocked, not that a detached script won't hit
-# the same wall _fetch_panahon_ws_ticket()'s docstring describes at
-# length. If fetch_panahon_lightning_frequency() below starts failing
-# with something other than a normal HTTP error (empty/non-JSON response,
-# a 403, etc.) where a browser hitting the identical URL works fine,
-# that's the same class of problem -- see _fetch_panahon_ws_ticket() for
-# the Playwright-based fix pattern to adapt here.
 PANAHON_LIGHTNING_REST_URL = "https://panahon.gov.ph/api/v1/lightning"
 PANAHON_FREQUENCY_FIELDS = [
     "observed_at", "latitude", "longitude", "type", "amplitude_ka", "height_m",
 ]
+
+# CONFIRMED live (2026-09-28): panahon.gov.ph now blocks Playwright's
+# default HEADLESS Chromium specifically -- both _fetch_panahon_ws_ticket()
+# and _fetch_panahon_lightning_frequency_via_browser() below were getting
+# served a bare `image/png` response (408-byte "page", title literally
+# "panahon.gov.ph (WIDTHxHEIGHT)" -- Chrome's own generated wrapper for
+# displaying a raw image file directly) instead of the real site, on EVERY
+# attempt, from multiple different networks (a GitHub Actions runner AND
+# an ordinary residential connection) -- ruling out an IP/ASN block, since
+# the one thing consistent across all the failures was headless mode
+# itself. Switching to a visible, non-headless launch on that same
+# residential connection immediately got the real page back (confirmed:
+# status 200, real title, csrf-token meta tag present). This wasn't
+# always true -- _fetch_panahon_ws_ticket()'s docstring documents
+# HEADLESS Chromium working fine when this was first built -- so
+# panahon.gov.ph most likely added headless-browser detection at some
+# point after that. A single constant here controls both call sites, so
+# it only needs updating in one place if panahon.gov.ph's behavior
+# changes again (or if a stealth-patching approach ever turns out more
+# reliable than just running headed).
+#
+# IMPORTANT CONSEQUENCE: this makes --lightning-source panahon AND
+# panahon-10min unable to run on a truly headless machine (a bare CI
+# runner, an SSH-only server) without a virtual display -- see
+# .github/workflows/lightning-watch.yml's `xvfb-run` wrapper for how this
+# repo's own GitHub Actions workflow was updated to provide one. Running
+# locally on an ordinary desktop (Windows/Mac/Linux with a real screen)
+# needs no such workaround -- a visible Chromium window will briefly pop
+# up and close again each time a ticket/lightning-data fetch happens.
+PANAHON_BROWSER_HEADLESS = False
 
 # Used for filenames/timestamps below instead of time.localtime(), which is
 # UTC on a GitHub Actions runner (they don't run in Philippines time) -- a
@@ -553,9 +590,9 @@ def _require_socketio():
 
 def _require_playwright():
     """Lazy-import Playwright so it's only a hard requirement for
-    --lightning-source panahon specifically (fetching its connection
-    ticket) -- everything else in this script, including
-    --lightning-source pagasa, works fine without it installed.
+    --lightning-source panahon and panahon-10min specifically -- everything
+    else in this script, including --lightning-source pagasa, works fine
+    without it installed.
 
     WHY A REAL BROWSER, NOT JUST ANOTHER HTTP CLIENT: this replaced a
     long chain of attempts to fetch panahon.gov.ph's connection ticket
@@ -579,9 +616,17 @@ def _require_playwright():
     that a general-purpose HTTP library fundamentally can't replicate
     (accumulated TLS session state, HTTP/2 frame-level behavior, or
     something else below the headers). Rather than keep guessing at
-    fingerprint details one at a time, this drives an ACTUAL headless
-    Chromium via Playwright for this one request -- sidestepping the
-    whole problem by not needing to spoof anything.
+    fingerprint details one at a time, this drives an ACTUAL Chromium via
+    Playwright for this one request -- sidestepping the whole problem by
+    not needing to spoof anything.
+
+    UPDATE (2026-09-28): "ACTUAL Chromium" alone stopped being enough --
+    see PANAHON_BROWSER_HEADLESS's comment above. panahon.gov.ph started
+    blocking Playwright's HEADLESS Chromium specifically too (confirmed:
+    identical symptom on two different networks, cleared immediately by
+    switching to a visible/non-headless launch on one of them) -- so a
+    real browser was necessary but, as of that date, no longer
+    sufficient on its own; it also has to not be running headless.
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -728,7 +773,7 @@ def _fetch_panahon_ws_ticket() -> str | None:
     sync_playwright = _require_playwright()
     try:
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=True)
+            browser = pw.chromium.launch(headless=PANAHON_BROWSER_HEADLESS)
             try:
                 # ignore_https_errors mirrors this script's --insecure /
                 # "Skip SSL verification" flag (INSECURE), same as every
@@ -1058,38 +1103,122 @@ def panahon_lightning_to_csv(strikes: list, out_path: Path) -> Path:
     return out_path
 
 
-_CSRF_META_RE = re.compile(
-    r'<meta\s+name=["\']csrf-token["\']\s+content=["\']([^"\']+)["\']', re.IGNORECASE
-)
+_PANAHON_FREQUENCY_JS = """
+    async (parameter) => {
+        // Same debug-info-on-error pattern as _PANAHON_TICKET_JS above --
+        // lets a failure here be told apart as "this genuinely isn't the
+        // real page" (blocked/redirected/a challenge response) vs. "the
+        // page loaded fine but something about it is unexpected."
+        const debug = {
+            url: location.href,
+            title: document.title,
+            htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+            bodySnippet: document.body ? document.body.innerText.slice(0, 300) : "(no body)",
+        };
+
+        const meta = document.querySelector('meta[name="csrf-token"]');
+        if (!meta) return {error: "no csrf-token meta tag on the page", debug};
+        const token = meta.getAttribute("content");
+        const url = "/api/v1/lightning?token=" + encodeURIComponent(token) +
+                    "&parameter=" + encodeURIComponent(parameter);
+        let res;
+        try {
+            res = await fetch(url, {credentials: "same-origin", cache: "no-store"});
+        } catch (e) {
+            return {error: "fetch() itself threw: " + e, debug};
+        }
+        if (!res.ok) return {error: "lightning request returned HTTP " + res.status, debug};
+        let data;
+        try {
+            data = await res.json();
+        } catch (e) {
+            return {error: "lightning response wasn't JSON: " + e, debug};
+        }
+        return {payload: data};
+    }
+"""
 
 
-def _fetch_panahon_csrf_token() -> str:
-    """Load panahon.gov.ph's homepage with plain `requests` (via the shared
-    SESSION, so the cookies it sets come along for the next request) and
-    pull the CSRF token out of its `<meta name="csrf-token">` tag.
+def _fetch_panahon_lightning_frequency_via_browser(parameter: str) -> dict:
+    """Fetch PANAHON_LIGHTNING_REST_URL via a real headless Chromium
+    instance -- the exact same approach, for the exact same reason, as
+    _fetch_panahon_ws_ticket() uses for the websocket ticket (see that
+    function's docstring, and PANAHON_LIGHTNING_REST_URL's comment above,
+    for the full story of why a plain `requests` call to this doesn't
+    work despite this endpoint's auth looking like a completely ordinary
+    CSRF-token+cookie pair). Runs _PANAHON_FREQUENCY_JS INSIDE the loaded
+    page via page.evaluate(), so it's genuinely a browser making the
+    request, not a spoofed one.
 
-    This is the same token the site's own JS reads from that same tag for
-    EVERY one of its /api/v1/... calls (asset-ticket, cap-alerts, wind,
-    lightning, ...), not something specific to lightning -- see
-    PANAHON_LIGHTNING_REST_URL's comment above for why this is expected to
-    work fine from a plain script even though the SEPARATE websocket
-    ticket endpoint does not.
+    Returns the parsed `{"success": ..., "data": [...]}` payload from a
+    successful fetch. Raises RuntimeError, with the same kind of debug
+    detail _fetch_panahon_ws_ticket() prints, on any failure -- unlike
+    that function (which swallows a failure and returns None, so one bad
+    ticket fetch doesn't kill a long --watch session), this raises,
+    because both callers of this (a one-shot fetch and
+    watch_panahon_lightning_frequency()'s poll loop) already handle/report
+    exceptions their own way and get more value from the full message
+    than from a silent empty result.
     """
-    resp = SESSION.get("https://panahon.gov.ph/", headers=BROWSER_HEADERS, timeout=20)
-    resp.raise_for_status()
-    match = _CSRF_META_RE.search(resp.text)
-    if not match:
+    sync_playwright = _require_playwright()
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=PANAHON_BROWSER_HEADLESS)
+            try:
+                context = browser.new_context(ignore_https_errors=INSECURE)
+                page = context.new_page()
+                nav_response = page.goto(
+                    "https://panahon.gov.ph/", wait_until="domcontentloaded", timeout=40000
+                )
+                result = page.evaluate(_PANAHON_FREQUENCY_JS, parameter)
+                if isinstance(result, dict) and result.get("error") and nav_response is not None:
+                    try:
+                        result["nav_status"] = nav_response.status
+                        result["nav_content_type"] = nav_response.headers.get("content-type")
+                    except Exception:
+                        pass
+            finally:
+                browser.close()
+    except Exception as e:
         raise RuntimeError(
-            "Couldn't find a <meta name=\"csrf-token\"> tag on "
-            "https://panahon.gov.ph/ -- either the page didn't load "
-            "normally (a bot/WAF check intercepting this like "
-            "fetch_timeline()'s can happen, see that function) or the "
-            "site changed how it exposes this token. Open "
-            "https://panahon.gov.ph in a normal browser and view-source "
-            "to check whether that meta tag is still there under the "
-            "same name."
+            f"Headless browser couldn't fetch panahon.gov.ph's "
+            f"'{parameter}' lightning data: {e}"
+        ) from e
+
+    error = result.get("error") if isinstance(result, dict) else "unexpected result shape"
+    if error:
+        lines = [f"Couldn't fetch panahon.gov.ph's '{parameter}' lightning data: {error}"]
+        debug = result.get("debug") if isinstance(result, dict) else None
+        if isinstance(debug, dict):
+            lines.append(
+                f"landed on: {debug.get('url')!r} | page title: {debug.get('title')!r} | "
+                f"page HTML length: {debug.get('htmlLength')}"
+            )
+            snippet = (debug.get("bodySnippet") or "").replace("\n", " ").strip()
+            if snippet:
+                lines.append(f"visible page text (first 300 chars): {snippet!r}")
+        if isinstance(result, dict) and ("nav_status" in result or "nav_content_type" in result):
+            lines.append(
+                f"homepage navigation itself got: HTTP {result.get('nav_status')!r}, "
+                f"content-type {result.get('nav_content_type')!r}"
+            )
+        lines.append(
+            "\nIf this keeps happening, panahon.gov.ph may be blocking "
+            "wherever this is running from at the network level (its own "
+            "IP/ASN, not just a client-fingerprint check a real browser "
+            "gets past) -- try the same command from a different network "
+            "(e.g. your own PC instead of a CI runner) to tell the two "
+            "apart. --lightning-source pagasa uses a completely different "
+            "site and doesn't depend on any of this."
         )
-    return match.group(1)
+        raise RuntimeError("\n".join(lines))
+
+    payload = result.get("payload") if isinstance(result, dict) else None
+    if not isinstance(payload, dict):
+        raise RuntimeError(
+            f"panahon.gov.ph's lightning API returned something unexpected: {result!r}"
+        )
+    return payload
 
 
 def _normalize_panahon_frequency_strike(raw: dict) -> dict:
@@ -1144,46 +1273,25 @@ def _normalize_panahon_frequency_strike(raw: dict) -> dict:
 
 
 def fetch_panahon_lightning_frequency(parameter: str = "ten_minute_frequency") -> list:
-    """GET panahon.gov.ph's REST lightning-frequency snapshot (see
+    """Fetch panahon.gov.ph's REST lightning-frequency snapshot (see
     PANAHON_LIGHTNING_REST_URL's comment above for the full mechanism) and
     return a list of normalized strike dicts.
 
     Unlike fetch_lightning_panahon() (the websocket push feed), this is a
     REST snapshot like PAGASA's own fetch_lightning() -- no --duration to
-    wait around for, no python-socketio/Playwright needed, just however
-    many strikes panahon.gov.ph is currently reporting for `parameter`
-    ("ten_minute_frequency" or "realtime_frequency" -- see the module
-    docstring / --lightning-source help for what each means).
+    wait around for, just however many strikes panahon.gov.ph is
+    currently reporting for `parameter` ("ten_minute_frequency" or
+    "realtime_frequency" -- see the module docstring / --lightning-source
+    help for what each means). It DOES need Playwright though (see
+    PANAHON_LIGHTNING_REST_URL's comment above) -- same requirement as
+    --lightning-source panahon, just not python-socketio/websocket-client
+    since this isn't the websocket path.
     """
-    token = _fetch_panahon_csrf_token()
-    resp = SESSION.get(
-        PANAHON_LIGHTNING_REST_URL,
-        params={"token": token, "parameter": parameter},
-        headers=BROWSER_HEADERS,
-        timeout=20,
-    )
-    resp.raise_for_status()
-
-    try:
-        payload = resp.json()
-    except ValueError:
-        preview = resp.text[:500].replace("\n", " ")
-        raise RuntimeError(
-            "panahon.gov.ph's lightning API didn't return JSON (status "
-            f"{resp.status_code}, content-type={resp.headers.get('Content-Type')}).\n"
-            f"First 500 chars of response:\n{preview}\n\n"
-            "If a real browser hitting the identical URL works fine, this "
-            "is likely the same class of bot/fingerprint block "
-            "_fetch_panahon_ws_ticket() had to work around with Playwright "
-            "-- see PANAHON_LIGHTNING_REST_URL's comment above."
-        ) from None
-
-    if isinstance(payload, dict):
-        data = payload.get("data")
-        if not payload.get("success", True) or not isinstance(data, list):
-            return []
-        return [_normalize_panahon_frequency_strike(raw) for raw in data]
-    return []
+    payload = _fetch_panahon_lightning_frequency_via_browser(parameter)
+    data = payload.get("data")
+    if not payload.get("success", True) or not isinstance(data, list):
+        return []
+    return [_normalize_panahon_frequency_strike(raw) for raw in data]
 
 
 def panahon_frequency_to_csv(strikes: list, out_path: Path) -> Path:
@@ -2212,13 +2320,15 @@ def main():
             "--duration seconds rather than a snapshot of 'right now'. "
             "'panahon-10min' = panahon.gov.ph's OTHER lightning layer (its "
             "REST 'ten_minute_frequency' snapshot, i.e. its UI's "
-            "'10-Minute Lightning' toggle) -- a plain polled REST call like "
-            "'pagasa', needs no extra packages at all (not even "
-            "python-socketio/playwright), gives a snapshot of 'right now' "
-            "in one-shot mode same as 'pagasa', but its exact per-strike "
-            "field names are still unconfirmed against a real populated "
-            "response -- see PANAHON_LIGHTNING_REST_URL's comment in the "
-            "source for details/caveats."
+            "'10-Minute Lightning' toggle) -- a plain polled REST call "
+            "(no python-socketio needed, unlike 'panahon'), gives a "
+            "snapshot of 'right now' in one-shot mode same as 'pagasa', "
+            "but still needs the playwright package -- panahon.gov.ph "
+            "blocks a plain script here just as it does for 'panahon' -- "
+            "and its exact per-strike field names are still unconfirmed "
+            "against a real populated response -- see "
+            "PANAHON_LIGHTNING_REST_URL's comment in the source for "
+            "details/caveats."
         ),
     )
     parser.add_argument(
