@@ -51,6 +51,8 @@ Usage
     python radar_to_tiff.py --retrieve selection.json  # download frames picked & saved via the GUI
     python radar_to_tiff.py --lightning --lightning-source panahon  # richer live feed, see below
     python radar_to_tiff.py --lightning --lightning-source panahon --watch  # stream it continuously
+    python radar_to_tiff.py --lightning --lightning-source panahon-10min  # 10-min REST snapshot, see below
+    python radar_to_tiff.py --lightning --lightning-source panahon-10min --watch --interval 300
     python radar_to_tiff.py --lightning --watch --window 60          # rolling 60-min CSV, oldest trimmed
     python radar_to_tiff.py --lightning --watch --split 60           # new CSV auto-saved every 60 min
 
@@ -79,6 +81,17 @@ and streams strikes to the CSV as they arrive, no polling interval needed.
 Requires the extra `python-socketio[client]` + `websocket-client` packages
 (see Requirements below) -- pagasa-source lightning and all radar features
 work fine without them.
+
+panahon.gov.ph has a THIRD lightning mode too, its own "10-Minute
+Lightning" layer (separate from the "Realtime Lightning"/websocket one
+above) -- pass --lightning-source panahon-10min to use it. Unlike the
+websocket feed, this is a plain polled REST snapshot (like pagasa above),
+needs NO extra packages at all -- not python-socketio, not Playwright --
+and gives a "right now" snapshot in one-shot mode rather than needing
+--duration to listen. Its per-strike field names are inferred rather than
+confirmed against a real populated response (every live check so far
+happened to catch a quiet stretch); see PANAHON_LIGHTNING_REST_URL's
+comment in the source for the full story on what's confirmed vs. not.
 
 (A third source, meteologix.com, was evaluated and dropped -- its data was
 reachable, but sweeping its per-province pages got this script's IP
@@ -124,6 +137,7 @@ import argparse
 import csv
 import io
 import json
+import re
 import sys
 import threading
 import time
@@ -175,6 +189,70 @@ LIGHTNING_URL = "https://pagasa.dost.gov.ph/api/Lightning"
 PANAHON_LIGHTNING_WS_URL = "https://ws.panahon.gov.ph"
 PANAHON_WS_TICKET_URL = "https://panahon.gov.ph/api/v1/ws-ticket"
 PANAHON_LIGHTNING_EVENT = "lx.data"
+
+# panahon.gov.ph's OTHER lightning layer -- "10-Minute Lightning" in its own
+# UI -- is a completely different, much simpler mechanism than the
+# websocket push feed above, confirmed directly by reading the exact
+# request its own bundled JS makes (js/beta.js, the shared LightningData
+# class's startWorker()/initLightning() methods):
+#
+#   GET https://panahon.gov.ph/api/v1/lightning?token=<csrf>&parameter=ten_minute_frequency
+#
+# where <csrf> is the value of the page's own <meta name="csrf-token">
+# tag -- an ordinary Laravel-style CSRF token paired with the session
+# cookie from loading the homepage, NOT the IP-bound short-lived "ticket"
+# the websocket path needs (that's a separate, unrelated auth mechanism --
+# see PANAHON_WS_TICKET_URL above). There is no bounding box, region, or
+# other filter parameter -- it's a flat nationwide query every time.
+# "Realtime Lightning" in the same UI section (parameter=realtime_frequency)
+# hits this identical REST shape too, but the site's own code only uses
+# that response to know a strike just arrived before switching to the
+# websocket for the live stream -- confirmed reachable the same way, but
+# not otherwise used here.
+#
+# CONFIRMED by hand, live, from inside an actual browser tab's own script
+# context (not a detached Python script): fetching this exact URL with
+# just the CSRF token returns a normal 200 response
+# (`{"success": true, "data": [...]}`, `data` empty when no strikes are
+# in the window) with NO sign of the bot/TLS-fingerprint blocking that
+# makes PANAHON_WS_TICKET_URL need the Playwright workaround below -- so
+# fetch_panahon_lightning_frequency() below uses plain `requests`, same as
+# every PAGASA endpoint elsewhere in this file, not Playwright.
+#
+# NOT YET CONFIRMED: what a POPULATED `data` array looks like -- every
+# live check so far happened to catch a quiet stretch with zero strikes,
+# so the per-strike field names below (PANAHON_FREQUENCY_FIELDS) are
+# inferred rather than directly observed: beta.js's `showLightning()`
+# renderer is shared between this REST path and the websocket path, and
+# for the websocket path it's handed a manually-built object shaped like
+# {value, amplitude, lat, lon, height, observed_at, readable_parameter}
+# (see the websocket handler further below) -- since showLightning() runs
+# the exact same rendering code either way with no branching seen between
+# the two callers, the server's own REST response most likely already
+# uses this same shape directly, rather than something showLightning()
+# reshapes internally. _normalize_panahon_frequency_strike() below is
+# written defensively (checks a couple of plausible alternate key names,
+# and keeps any field it doesn't recognize rather than dropping it) so a
+# wrong guess here doesn't silently lose data -- if the real field names
+# differ, they'll show up as extra CSV columns instead of vanishing.
+# Worth re-confirming directly the first time this actually catches a
+# strike (compare the CSV output against what panahon.gov.ph's own map
+# shows for the same strike).
+#
+# ALSO NOT YET CONFIRMED: whether plain `requests` (as opposed to a real
+# browser) can be blocked here the same way PANAHON_WS_TICKET_URL was --
+# the in-browser test above only proves the request/response shape and
+# that a real browser isn't blocked, not that a detached script won't hit
+# the same wall _fetch_panahon_ws_ticket()'s docstring describes at
+# length. If fetch_panahon_lightning_frequency() below starts failing
+# with something other than a normal HTTP error (empty/non-JSON response,
+# a 403, etc.) where a browser hitting the identical URL works fine,
+# that's the same class of problem -- see _fetch_panahon_ws_ticket() for
+# the Playwright-based fix pattern to adapt here.
+PANAHON_LIGHTNING_REST_URL = "https://panahon.gov.ph/api/v1/lightning"
+PANAHON_FREQUENCY_FIELDS = [
+    "observed_at", "latitude", "longitude", "type", "amplitude_ka", "height_m",
+]
 
 # Used for filenames/timestamps below instead of time.localtime(), which is
 # UTC on a GitHub Actions runner (they don't run in Philippines time) -- a
@@ -977,6 +1055,294 @@ def panahon_lightning_to_csv(strikes: list, out_path: Path) -> Path:
         for strike in strikes:
             writer.writerow(strike)
 
+    return out_path
+
+
+_CSRF_META_RE = re.compile(
+    r'<meta\s+name=["\']csrf-token["\']\s+content=["\']([^"\']+)["\']', re.IGNORECASE
+)
+
+
+def _fetch_panahon_csrf_token() -> str:
+    """Load panahon.gov.ph's homepage with plain `requests` (via the shared
+    SESSION, so the cookies it sets come along for the next request) and
+    pull the CSRF token out of its `<meta name="csrf-token">` tag.
+
+    This is the same token the site's own JS reads from that same tag for
+    EVERY one of its /api/v1/... calls (asset-ticket, cap-alerts, wind,
+    lightning, ...), not something specific to lightning -- see
+    PANAHON_LIGHTNING_REST_URL's comment above for why this is expected to
+    work fine from a plain script even though the SEPARATE websocket
+    ticket endpoint does not.
+    """
+    resp = SESSION.get("https://panahon.gov.ph/", headers=BROWSER_HEADERS, timeout=20)
+    resp.raise_for_status()
+    match = _CSRF_META_RE.search(resp.text)
+    if not match:
+        raise RuntimeError(
+            "Couldn't find a <meta name=\"csrf-token\"> tag on "
+            "https://panahon.gov.ph/ -- either the page didn't load "
+            "normally (a bot/WAF check intercepting this like "
+            "fetch_timeline()'s can happen, see that function) or the "
+            "site changed how it exposes this token. Open "
+            "https://panahon.gov.ph in a normal browser and view-source "
+            "to check whether that meta tag is still there under the "
+            "same name."
+        )
+    return match.group(1)
+
+
+def _normalize_panahon_frequency_strike(raw: dict) -> dict:
+    """Turn one raw record from PANAHON_LIGHTNING_REST_URL's `data` array
+    into the flatter shape used by PANAHON_FREQUENCY_FIELDS.
+
+    Written defensively -- see PANAHON_LIGHTNING_REST_URL's comment above
+    for why the exact field names here are an educated guess rather than
+    confirmed against a real populated response. Checks the guessed name
+    first, falls back to a plausible alternate, and any field not
+    recognized at all is kept as-is (via panahon_frequency_to_csv()'s
+    "extra fields" handling below) rather than silently dropped -- so a
+    wrong guess shows up as an oddly-named extra CSV column instead of
+    missing data.
+    """
+    lat = raw.get("lat", raw.get("latitude"))
+    lon = raw.get("lon", raw.get("longitude"))
+    value = raw.get("value", raw.get("type"))
+    observed_at = raw.get("observed_at", raw.get("time"))
+    amplitude = raw.get("amplitude", raw.get("peakCurrent"))
+    height = raw.get("height", raw.get("icHeight"))
+
+    readable = raw.get("readable_parameter")
+    if readable:
+        strike_type = readable
+    elif value in (1, "1"):
+        strike_type = "Cloud to Cloud"
+    elif value is not None:
+        strike_type = "Cloud to Ground"
+    else:
+        strike_type = None
+
+    out = {
+        "observed_at": observed_at,
+        "latitude": lat,
+        "longitude": lon,
+        "type": strike_type,
+        "amplitude_ka": amplitude,
+        "height_m": height,
+    }
+    # Carry over anything unrecognized (or the raw pre-normalization
+    # fields, if the guessed names above turn out wrong) rather than
+    # losing it.
+    for key, val in raw.items():
+        if key not in ("lat", "latitude", "lon", "longitude", "value", "type",
+                       "observed_at", "time", "amplitude", "peakCurrent",
+                       "height", "icHeight", "readable_parameter"):
+            out[key] = val
+    out["_raw_lat"] = lat
+    out["_raw_lon"] = lon
+    return out
+
+
+def fetch_panahon_lightning_frequency(parameter: str = "ten_minute_frequency") -> list:
+    """GET panahon.gov.ph's REST lightning-frequency snapshot (see
+    PANAHON_LIGHTNING_REST_URL's comment above for the full mechanism) and
+    return a list of normalized strike dicts.
+
+    Unlike fetch_lightning_panahon() (the websocket push feed), this is a
+    REST snapshot like PAGASA's own fetch_lightning() -- no --duration to
+    wait around for, no python-socketio/Playwright needed, just however
+    many strikes panahon.gov.ph is currently reporting for `parameter`
+    ("ten_minute_frequency" or "realtime_frequency" -- see the module
+    docstring / --lightning-source help for what each means).
+    """
+    token = _fetch_panahon_csrf_token()
+    resp = SESSION.get(
+        PANAHON_LIGHTNING_REST_URL,
+        params={"token": token, "parameter": parameter},
+        headers=BROWSER_HEADERS,
+        timeout=20,
+    )
+    resp.raise_for_status()
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        preview = resp.text[:500].replace("\n", " ")
+        raise RuntimeError(
+            "panahon.gov.ph's lightning API didn't return JSON (status "
+            f"{resp.status_code}, content-type={resp.headers.get('Content-Type')}).\n"
+            f"First 500 chars of response:\n{preview}\n\n"
+            "If a real browser hitting the identical URL works fine, this "
+            "is likely the same class of bot/fingerprint block "
+            "_fetch_panahon_ws_ticket() had to work around with Playwright "
+            "-- see PANAHON_LIGHTNING_REST_URL's comment above."
+        ) from None
+
+    if isinstance(payload, dict):
+        data = payload.get("data")
+        if not payload.get("success", True) or not isinstance(data, list):
+            return []
+        return [_normalize_panahon_frequency_strike(raw) for raw in data]
+    return []
+
+
+def panahon_frequency_to_csv(strikes: list, out_path: Path) -> Path:
+    """Write panahon.gov.ph REST lightning-frequency strikes to a CSV file."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fieldnames = list(PANAHON_FREQUENCY_FIELDS)
+    for strike in strikes:
+        for key in strike.keys():
+            if key not in fieldnames and not key.startswith("_raw_"):
+                fieldnames.append(key)
+
+    with out_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for strike in strikes:
+            writer.writerow(strike)
+
+    return out_path
+
+
+def watch_panahon_lightning_frequency(
+    outdir: Path,
+    interval: int,
+    parameter: str = "ten_minute_frequency",
+    window_minutes: int = None,
+    split_minutes: int = None,
+    stop_event=None,
+) -> Path:
+    """Poll panahon.gov.ph's REST lightning-frequency snapshot repeatedly --
+    same idea as watch_lightning() (PAGASA's own REST feed), not the
+    websocket-based watch_lightning_panahon(). panahon.gov.ph's own
+    front-end repolls this every 5 minutes (300000ms, confirmed directly
+    in beta.js); --interval defaults to 60s like every other --watch mode
+    in this script, which just polls more often than strictly needed --
+    pass --interval 300 to match the site's own cadence exactly.
+
+    Same three mutually exclusive modes as watch_lightning(), de-duplicated
+    on (observed_at, latitude, longitude):
+    - Continuous (default): one ever-growing CSV.
+    - window_minutes=N: rolling-window trim, rewritten every poll.
+    - split_minutes=N: a fresh CSV every N minutes, nothing ever dropped.
+
+    Stops on Ctrl+C (or when stop_event is set, for callers like the GUI).
+    """
+    if window_minutes and split_minutes:
+        raise ValueError("window_minutes and split_minutes are mutually exclusive -- pick one.")
+
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    def make_path(now: float) -> Path:
+        stamp = datetime.fromtimestamp(now, tz=PH_TZ).strftime("%b_%d_%Y_%H%M")
+        if split_minutes:
+            return outdir / f"panahon_{parameter}_split{split_minutes}min_{stamp}.csv"
+        elif window_minutes:
+            return outdir / f"panahon_{parameter}_last{window_minutes}min_{stamp}.csv"
+        else:
+            return outdir / f"panahon_{parameter}_log_{stamp}.csv"
+
+    segment_start = time.time()
+    out_path = make_path(segment_start)
+    seen: dict = {}  # key -> (strike_dict, epoch_seconds_first_observed)
+
+    print(f"Watching panahon.gov.ph's '{parameter}' lightning feed every {interval}s.")
+    if split_minutes:
+        print(f"Splitting into a new CSV every {split_minutes} minutes -- first segment: {out_path}\n")
+    elif window_minutes:
+        print(f"Rolling {window_minutes}-minute window mode: {out_path}\n")
+    else:
+        print(f"Logging every new strike seen to {out_path}\n")
+    print("Press Ctrl+C to stop.\n")
+
+    def rewrite_window_file(now: float) -> int:
+        cutoff = now - window_minutes * 60
+        rows = sorted(
+            ((t, s) for s, t in seen.values() if t >= cutoff), key=lambda pair: pair[0]
+        )
+        fieldnames = list(PANAHON_FREQUENCY_FIELDS) + ["first_seen"]
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            for t, s in rows:
+                row = dict(s)
+                row["first_seen"] = datetime.fromtimestamp(t, tz=PH_TZ).strftime("%Y-%m-%d %H:%M:%S PHT")
+                writer.writerow(row)
+        return len(rows)
+
+    def poll_once():
+        nonlocal out_path, segment_start, seen
+        now = time.time()
+
+        if split_minutes and now - segment_start >= split_minutes * 60:
+            print(
+                f"  [{time.strftime('%H:%M:%S')}] {split_minutes}-min segment complete "
+                f"({len(seen)} strike(s)) -- saved {out_path}"
+            )
+            segment_start = now
+            out_path = make_path(now)
+            seen = {}
+            print(f"  [{time.strftime('%H:%M:%S')}] starting new segment -- {out_path}\n")
+
+        strikes = fetch_panahon_lightning_frequency(parameter=parameter)
+        new = []
+        for s in strikes:
+            key = (s.get("observed_at"), s.get("_raw_lat", s.get("latitude")), s.get("_raw_lon", s.get("longitude")))
+            if key not in seen:
+                seen[key] = (s, now)
+                new.append(s)
+
+        total_label = f"segment total: {len(seen)}" if split_minutes else f"total logged: {len(seen)}"
+
+        if window_minutes:
+            cutoff = now - window_minutes * 60
+            for key in [k for k, (_, t) in seen.items() if t < cutoff]:
+                del seen[key]
+            active = rewrite_window_file(now)
+            print(
+                f"  [{time.strftime('%H:%M:%S')}] +{len(new)} new -- "
+                f"{active} strike(s) currently within the last {window_minutes} min"
+            )
+        elif new:
+            write_header = not out_path.exists()
+            fieldnames = list(PANAHON_FREQUENCY_FIELDS)
+            for s in new:
+                for key in s.keys():
+                    if key not in fieldnames and not key.startswith("_raw_"):
+                        fieldnames.append(key)
+            with out_path.open("a", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+                if write_header:
+                    writer.writeheader()
+                for s in new:
+                    writer.writerow(s)
+            print(f"  [{time.strftime('%H:%M:%S')}] +{len(new)} new strike(s) ({total_label})")
+        else:
+            print(f"  [{time.strftime('%H:%M:%S')}] no new strikes ({total_label})")
+
+    try:
+        while True:
+            if stop_event is not None and stop_event.is_set():
+                break
+            try:
+                poll_once()
+            except Exception as e:
+                print(f"  [poll error, will retry] {e}")
+            for _ in range(interval):
+                if stop_event is not None and stop_event.is_set():
+                    break
+                time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+
+    if split_minutes:
+        print(
+            f"\nStopped. Final (unfinished) segment had {len(seen)} strike(s) "
+            f"-- see {out_path} (and any earlier completed segments in {outdir})"
+        )
+    else:
+        print(f"\nStopped. {len(seen)} strike(s) currently tracked -- see {out_path}")
     return out_path
 
 
@@ -1832,18 +2198,27 @@ def main():
     )
     parser.add_argument(
         "--lightning-source",
-        choices=["pagasa", "panahon"],
+        choices=["pagasa", "panahon", "panahon-10min"],
         default="pagasa",
         help=(
-            "Which site to pull --lightning data from (default: pagasa). "
-            "'pagasa' = pagasa.dost.gov.ph's polled REST snapshot (basic "
-            "fields). 'panahon' = panahon.gov.ph's live Socket.IO push feed "
-            "for the same underlying lightning network -- richer per-strike "
-            "fields (cloud-to-ground/cloud-to-cloud, peak current, height, "
-            "sensor count) but needs the extra python-socketio package (see "
-            "module docstring) and, in one-shot mode, only catches whatever "
-            "happens during --duration seconds rather than a snapshot of "
-            "'right now'."
+            "Which site/feed to pull --lightning data from (default: "
+            "pagasa). 'pagasa' = pagasa.dost.gov.ph's polled REST snapshot "
+            "(basic fields). 'panahon' = panahon.gov.ph's live Socket.IO "
+            "push feed for the same underlying lightning network -- richer "
+            "per-strike fields (cloud-to-ground/cloud-to-cloud, peak "
+            "current, height, sensor count) but needs the extra "
+            "python-socketio + playwright packages (see module docstring) "
+            "and, in one-shot mode, only catches whatever happens during "
+            "--duration seconds rather than a snapshot of 'right now'. "
+            "'panahon-10min' = panahon.gov.ph's OTHER lightning layer (its "
+            "REST 'ten_minute_frequency' snapshot, i.e. its UI's "
+            "'10-Minute Lightning' toggle) -- a plain polled REST call like "
+            "'pagasa', needs no extra packages at all (not even "
+            "python-socketio/playwright), gives a snapshot of 'right now' "
+            "in one-shot mode same as 'pagasa', but its exact per-strike "
+            "field names are still unconfirmed against a real populated "
+            "response -- see PANAHON_LIGHTNING_REST_URL's comment in the "
+            "source for details/caveats."
         ),
     )
     parser.add_argument(
@@ -2006,6 +2381,11 @@ def main():
             sys.exit(1)
         if args.lightning_source == "panahon":
             watch_lightning_panahon(args.outdir, window_minutes=args.window, split_minutes=args.split)
+        elif args.lightning_source == "panahon-10min":
+            watch_panahon_lightning_frequency(
+                args.outdir, args.interval, parameter="ten_minute_frequency",
+                window_minutes=args.window, split_minutes=args.split,
+            )
         else:
             watch_lightning(
                 args.outdir, args.interval, window_minutes=args.window, split_minutes=args.split
@@ -2032,6 +2412,30 @@ def main():
                 "occur during this window; try again, use --duration to "
                 "listen longer, or use --watch to stream continuously. The "
                 "CSV was still written with headers only.)"
+            )
+        print("Done.")
+        return
+
+    if args.lightning and args.lightning_source == "panahon-10min":
+        print("Fetching panahon.gov.ph's 10-minute lightning-frequency snapshot...")
+        strikes = fetch_panahon_lightning_frequency(parameter="ten_minute_frequency")
+        print(f"Found {len(strikes)} strike(s) reported right now.")
+
+        args.outdir.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%b_%d_%Y_%I%M%p")
+        out_path = unique_path(args.outdir / f"panahon_ten_minute_frequency_{stamp}.csv")
+        panahon_frequency_to_csv(strikes, out_path)
+        print(f"-> wrote {out_path}")
+        if not strikes:
+            print(
+                "(No strikes right now -- this just means none are "
+                "currently in panahon.gov.ph's 10-minute window; the CSV "
+                "was still written with headers only, so you can confirm "
+                "the fetch ran. If this keeps returning empty even when "
+                "you can see strikes on panahon.gov.ph's own map with the "
+                "'10-Minute Lightning' layer on, see "
+                "PANAHON_LIGHTNING_REST_URL's comment in the source for "
+                "what's confirmed vs. not about this endpoint.)"
             )
         print("Done.")
         return
