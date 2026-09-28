@@ -550,24 +550,36 @@ def _normalize_panahon_strike(raw: dict) -> dict:
 # credentials) before ever calling _panahon_connect_with_retries().
 _PANAHON_TICKET_JS = """
     async () => {
+        // Debug info attached to every error return below -- lets us tell
+        // "this genuinely isn't the real page" (blocked/redirected/a
+        // challenge page) apart from "the page loaded fine but something
+        // about it is unexpected" (site changed something) the next time
+        // this fails, instead of guessing blind.
+        const debug = {
+            url: location.href,
+            title: document.title,
+            htmlLength: document.documentElement ? document.documentElement.outerHTML.length : 0,
+            bodySnippet: document.body ? document.body.innerText.slice(0, 300) : "(no body)",
+        };
+
         const meta = document.querySelector('meta[name="csrf-token"]');
-        if (!meta) return {error: "no csrf-token meta tag on the page"};
+        if (!meta) return {error: "no csrf-token meta tag on the page", debug};
         const token = meta.getAttribute("content");
         const url = "/api/v1/ws-ticket?token=" + encodeURIComponent(token);
         let res;
         try {
             res = await fetch(url, {credentials: "same-origin", cache: "no-store"});
         } catch (e) {
-            return {error: "fetch() itself threw: " + e};
+            return {error: "fetch() itself threw: " + e, debug};
         }
-        if (!res.ok) return {error: "ticket request returned HTTP " + res.status};
+        if (!res.ok) return {error: "ticket request returned HTTP " + res.status, debug};
         let data;
         try {
             data = await res.json();
         } catch (e) {
-            return {error: "ticket response wasn't JSON: " + e};
+            return {error: "ticket response wasn't JSON: " + e, debug};
         }
-        if (!data || typeof data.ticket !== "string") return {error: "no usable 'ticket' field in response"};
+        if (!data || typeof data.ticket !== "string") return {error: "no usable 'ticket' field in response", debug};
         return {ticket: data.ticket};
     }
 """
@@ -656,6 +668,16 @@ def _fetch_panahon_ws_ticket() -> str | None:
     error = result.get("error") if isinstance(result, dict) else "unexpected result shape"
     if error:
         print(f"  [panahon ticket] {error}")
+        debug = result.get("debug") if isinstance(result, dict) else None
+        if isinstance(debug, dict):
+            print(
+                f"  [panahon ticket debug] landed on: {debug.get('url')!r} | "
+                f"page title: {debug.get('title')!r} | "
+                f"page HTML length: {debug.get('htmlLength')}"
+            )
+            snippet = (debug.get("bodySnippet") or "").replace("\n", " ").strip()
+            if snippet:
+                print(f"  [panahon ticket debug] visible page text (first 300 chars): {snippet!r}")
         _note_panahon_ticket_failure()
         return None
     ticket = result.get("ticket")
