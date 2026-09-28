@@ -657,8 +657,20 @@ def _fetch_panahon_ws_ticket() -> str | None:
                 # other request this file makes.
                 context = browser.new_context(ignore_https_errors=INSECURE)
                 page = context.new_page()
-                page.goto("https://panahon.gov.ph/", wait_until="domcontentloaded", timeout=40000)
+                nav_response = page.goto("https://panahon.gov.ph/", wait_until="domcontentloaded", timeout=40000)
                 result = page.evaluate(_PANAHON_TICKET_JS)
+                if isinstance(result, dict) and result.get("error") and nav_response is not None:
+                    # Only bother capturing this when something's already wrong --
+                    # exactly what content-type/status the homepage NAVIGATION
+                    # itself got, straight from the response, no guessing from
+                    # the rendered page. Tells apart "got served an image/other
+                    # non-HTML content" (status/content-type will show it plainly)
+                    # from "got real HTML back but it's just missing the tag".
+                    try:
+                        result["nav_status"] = nav_response.status
+                        result["nav_content_type"] = nav_response.headers.get("content-type")
+                    except Exception:
+                        pass
             finally:
                 browser.close()
     except Exception as e:
@@ -678,6 +690,11 @@ def _fetch_panahon_ws_ticket() -> str | None:
             snippet = (debug.get("bodySnippet") or "").replace("\n", " ").strip()
             if snippet:
                 print(f"  [panahon ticket debug] visible page text (first 300 chars): {snippet!r}")
+        if isinstance(result, dict) and ("nav_status" in result or "nav_content_type" in result):
+            print(
+                f"  [panahon ticket debug] homepage navigation itself got: "
+                f"HTTP {result.get('nav_status')!r}, content-type {result.get('nav_content_type')!r}"
+            )
         _note_panahon_ticket_failure()
         return None
     ticket = result.get("ticket")
