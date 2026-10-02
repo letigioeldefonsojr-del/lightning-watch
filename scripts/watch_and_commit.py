@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import signal
 import subprocess
 import sys
@@ -123,6 +124,13 @@ def git_commit_and_push(outdir: Path, branch: str, message: str) -> bool:
         return False
     sh(["git", "commit", "-m", message], check=True)
 
+    # Used below if a rebase conflicts on index.json specifically -- see
+    # that branch for why, and GIT_EDITOR/GIT_SEQUENCE_EDITOR=true (a no-op
+    # command) so `git rebase --continue` can never hang this job waiting
+    # on an interactive editor that doesn't exist on a CI runner.
+    index_rel = (outdir / "index.json").as_posix()
+    no_editor_env = {**os.environ, "GIT_EDITOR": "true", "GIT_SEQUENCE_EDITOR": "true"}
+
     for attempt in range(1, 4):
         sh(["git", "fetch", "origin", branch])
         # --autostash: the watch subprocess keeps appending rows to the CSV
@@ -137,19 +145,71 @@ def git_commit_and_push(outdir: Path, branch: str, message: str) -> bool:
         # longer blocks every single checkpoint.
         rebase = sh(["git", "rebase", "--autostash", f"origin/{branch}"])
         if rebase.returncode != 0:
-            # Something else pushed to this branch and now conflicts with
-            # our change (very unlikely -- this workflow is the only
-            # writer under normal use). Bail out rather than risk making
-            # things worse; this run's data stays committed locally on
-            # the runner only and is lost when the job ends, but nothing
-            # in the actual repo gets corrupted.
-            print(
-                "  [git] rebase conflicted -- aborting. This run's checkpoint "
-                "will NOT be pushed (something else changed this branch).",
-                flush=True,
-            )
-            sh(["git", "rebase", "--abort"])
-            return False
+            # CONFIRMED LIVE (2026-10-02): this is NOT as rare as originally
+            # assumed here -- it happens during the brief handoff window
+            # between one scheduled run's FINAL checkpoint and the next
+            # run's FIRST one (both racing to update data/lightning/
+            # index.json around the same few minutes), not just from a
+            # genuinely unexpected second writer. The old behavior here was
+            # to give up on the checkpoint entirely -- but since that left
+            # this branch permanently behind origin for the rest of this
+            # job's run, EVERY later checkpoint kept hitting the same
+            # conflict too, so one bad handoff silently stopped this run
+            # from ever pushing anything again (what actually happened: see
+            # the git log from 2026-10-02 ~01:44 UTC onward).
+            #
+            # index.json is entirely machine-regenerated every checkpoint
+            # (see update_index() -- it's a from-scratch scan of whatever
+            # CSVs are on disk, never hand-edited or incrementally patched),
+            # so when it's the ONLY file conflicting, there's nothing to
+            # actually merge: git already applies the rest of this rebase
+            # step's changes cleanly on its own (the real CSV data, which
+            # is additive/per-file, not something both sides rewrite
+            # wholesale) BEFORE it ever gets to the index.json conflict --
+            # so simply rebuilding index.json fresh, right here, naturally
+            # reflects both runs' CSVs correctly with no manual merging.
+            # Any OTHER conflicting file (e.g. actual CSV content
+            # disagreeing, which would mean two watch processes genuinely
+            # ran at once -- something the workflow's `concurrency:` block
+            # is specifically there to prevent) is deliberately NOT
+            # auto-resolved the same way -- that's a stranger situation
+            # worth surfacing loudly rather than silently guessing at.
+            conflicted = subprocess.run(
+                ["git", "diff", "--name-only", "--diff-filter=U"],
+                capture_output=True, text=True,
+            ).stdout.split()
+            if conflicted == [index_rel]:
+                print(
+                    f"  [git] rebase conflict is only in {index_rel} (a "
+                    "regenerated file) -- rebuilding it fresh instead of "
+                    "giving up this checkpoint.",
+                    flush=True,
+                )
+                update_index(outdir)
+                sh(["git", "add", index_rel])
+                cont = sh(["git", "rebase", "--continue"], env=no_editor_env)
+                if cont.returncode != 0:
+                    print(
+                        "  [git] couldn't complete the rebase even after "
+                        "resolving index.json -- aborting. This run's "
+                        "checkpoint will NOT be pushed.",
+                        flush=True,
+                    )
+                    sh(["git", "rebase", "--abort"])
+                    return False
+                # Falls through to the push attempt below, same as the
+                # no-conflict path.
+            else:
+                print(
+                    "  [git] rebase conflicted on "
+                    f"{', '.join(conflicted) or 'an unknown file'} -- "
+                    "aborting. This run's checkpoint will NOT be pushed "
+                    "(something else changed this branch in an unexpected "
+                    "way).",
+                    flush=True,
+                )
+                sh(["git", "rebase", "--abort"])
+                return False
         push = sh(["git", "push", "origin", f"HEAD:{branch}"])
         if push.returncode == 0:
             return True
