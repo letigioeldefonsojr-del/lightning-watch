@@ -94,7 +94,12 @@
       "name": "panahon_lightning_split60min_Oct_03_2026_0601.csv",
       "row_count": 3460,
       "size_bytes": 276416
+    },
+    {
+      "name": "panahon_lightning_split60min_Oct_03_2026_0701.csv",
+      "row_count": 636,
+      "size_bytes": 50662
     }
   ],
-  "generated_at": "2026-10-02T23:01:39.042581+00:00"
+  "generated_at": "2026-10-02T23:11:40.651741+00:00"
 }
