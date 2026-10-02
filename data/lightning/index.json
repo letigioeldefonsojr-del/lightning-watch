@@ -2,13 +2,8 @@
   "files": [
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_0001.csv",
-      "row_count": 2226,
-      "size_bytes": 175168
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_02_2026_0101.csv",
-      "row_count": 2321,
-      "size_bytes": 183673
+      "row_count": 2575,
+      "size_bytes": 202691
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_0208.csv",
@@ -16,9 +11,14 @@
       "size_bytes": 105210
     },
     {
+      "name": "panahon_lightning_split60min_Oct_02_2026_0101.csv",
+      "row_count": 2321,
+      "size_bytes": 183673
+    },
+    {
       "name": "panahon_lightning_split60min_Oct_02_2026_0308.csv",
-      "row_count": 1560,
-      "size_bytes": 122163
+      "row_count": 1882,
+      "size_bytes": 147643
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_0408.csv",
@@ -27,13 +27,13 @@
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_0505.csv",
-      "row_count": 4275,
-      "size_bytes": 340934
+      "row_count": 5251,
+      "size_bytes": 419331
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_0605.csv",
-      "row_count": 5935,
-      "size_bytes": 476572
+      "row_count": 6733,
+      "size_bytes": 540468
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_0705.csv",
@@ -42,19 +42,24 @@
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_1103.csv",
-      "row_count": 1356,
-      "size_bytes": 108707
+      "row_count": 1879,
+      "size_bytes": 150730
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_1203.csv",
-      "row_count": 5215,
-      "size_bytes": 419075
+      "row_count": 6558,
+      "size_bytes": 527053
     },
     {
       "name": "panahon_lightning_split60min_Oct_02_2026_1303.csv",
       "row_count": 8489,
       "size_bytes": 682078
+    },
+    {
+      "name": "panahon_lightning_split60min_Oct_02_2026_1402.csv",
+      "row_count": 1190,
+      "size_bytes": 95302
     }
   ],
-  "generated_at": "2026-10-02T06:01:35.288839+00:00"
+  "generated_at": "2026-10-02T06:12:21.746251+00:00"
 }
