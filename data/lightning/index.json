@@ -1,91 +1,6 @@
 {
   "files": [
     {
-      "name": "panahon_lightning_split60min_Oct_03_2026_0701.csv",
-      "row_count": 2604,
-      "size_bytes": 207941
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_0801.csv",
-      "row_count": 2497,
-      "size_bytes": 199435
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_0901.csv",
-      "row_count": 1596,
-      "size_bytes": 127724
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1001.csv",
-      "row_count": 1984,
-      "size_bytes": 158692
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1101.csv",
-      "row_count": 3122,
-      "size_bytes": 250102
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1201.csv",
-      "row_count": 4236,
-      "size_bytes": 338076
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1301.csv",
-      "row_count": 7169,
-      "size_bytes": 572659
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1401.csv",
-      "row_count": 8458,
-      "size_bytes": 675242
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1501.csv",
-      "row_count": 7610,
-      "size_bytes": 605672
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1601.csv",
-      "row_count": 6231,
-      "size_bytes": 494589
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1701.csv",
-      "row_count": 5145,
-      "size_bytes": 408744
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1801.csv",
-      "row_count": 4275,
-      "size_bytes": 337626
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_1901.csv",
-      "row_count": 3609,
-      "size_bytes": 284699
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_2001.csv",
-      "row_count": 3411,
-      "size_bytes": 268785
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_2101.csv",
-      "row_count": 2396,
-      "size_bytes": 189181
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_2201.csv",
-      "row_count": 4634,
-      "size_bytes": 365822
-    },
-    {
-      "name": "panahon_lightning_split60min_Oct_03_2026_2301.csv",
-      "row_count": 5240,
-      "size_bytes": 414883
-    },
-    {
       "name": "panahon_lightning_split60min_Oct_04_2026_0001.csv",
       "row_count": 3662,
       "size_bytes": 290750
@@ -119,7 +34,12 @@
       "name": "panahon_lightning_split60min_Oct_04_2026_0601.csv",
       "row_count": 2029,
       "size_bytes": 161427
+    },
+    {
+      "name": "panahon_lightning_split60min_Oct_04_2026_0701.csv",
+      "row_count": 15,
+      "size_bytes": 1258
     }
   ],
-  "generated_at": "2026-10-03T22:51:24.629818+00:00"
+  "generated_at": "2026-10-03T23:01:26.268620+00:00"
 }
