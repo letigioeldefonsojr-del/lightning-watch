@@ -47,9 +47,39 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-def sh(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+def sh(cmd: list[str], timeout: int = 90, **kwargs) -> subprocess.CompletedProcess:
+    """Run a command and return its CompletedProcess.
+
+    CONFIRMED LIVE (2026-10-06): every call here used to run with no
+    timeout at all. subprocess.run() blocks *forever* if the process never
+    exits on its own -- and a `git fetch`/`git push` against GitHub can do
+    exactly that on a stalled connection (no response, no error, just
+    silence), rather than failing fast. When that happened mid-run, the
+    watcher's main loop (which is single-threaded -- see main()) froze
+    inside this one blocking call: not crashed (so no red X, no loud
+    ::error::), not progressing (so index.json's generated_at timestamp
+    -- which update_index() rewrites on every single checkpoint -- stopped
+    advancing and stayed frozen at whatever the last successful checkpoint
+    was), just silently stuck there for the rest of the job's multi-hour
+    duration. That's a different failure mode than the index.json rebase
+    conflict fixed earlier in git_commit_and_push() below -- this is a
+    network call that never returns at all, not one that returns an error.
+    A 90s timeout (generous for what's normally a <5s GitHub operation)
+    turns that silent freeze into an ordinary failed attempt instead, which
+    the existing 3-attempt retry loop in git_commit_and_push() already
+    knows how to handle -- so one bad network hang now costs at most ~90s
+    before the next retry, instead of the rest of the job.
+    """
     print(f"+ {' '.join(cmd)}", flush=True)
-    return subprocess.run(cmd, **kwargs)
+    try:
+        return subprocess.run(cmd, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired:
+        print(
+            f"  [git] '{' '.join(cmd)}' didn't finish within {timeout}s -- "
+            "treating it as a failed attempt instead of hanging forever.",
+            flush=True,
+        )
+        return subprocess.CompletedProcess(cmd, returncode=124)
 
 
 def count_rows(csv_path: Path) -> int:
