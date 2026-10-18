@@ -2,8 +2,8 @@
   "files": [
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0001.csv",
-      "row_count": 2386,
-      "size_bytes": 188400
+      "row_count": 2627,
+      "size_bytes": 207407
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0101.csv",
@@ -12,13 +12,13 @@
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0201.csv",
-      "row_count": 3235,
-      "size_bytes": 255867
+      "row_count": 3731,
+      "size_bytes": 295157
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0301.csv",
-      "row_count": 2746,
-      "size_bytes": 217528
+      "row_count": 3230,
+      "size_bytes": 255882
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0401.csv",
@@ -27,13 +27,13 @@
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0501.csv",
-      "row_count": 3364,
-      "size_bytes": 267884
+      "row_count": 3927,
+      "size_bytes": 312897
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0601.csv",
-      "row_count": 3210,
-      "size_bytes": 256446
+      "row_count": 3875,
+      "size_bytes": 309409
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0701.csv",
@@ -42,13 +42,13 @@
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0801.csv",
-      "row_count": 2990,
-      "size_bytes": 238633
+      "row_count": 3546,
+      "size_bytes": 282903
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_0901.csv",
-      "row_count": 2717,
-      "size_bytes": 216431
+      "row_count": 3148,
+      "size_bytes": 250849
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_1001.csv",
@@ -57,19 +57,24 @@
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_1402.csv",
-      "row_count": 4432,
-      "size_bytes": 354617
+      "row_count": 5112,
+      "size_bytes": 408979
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_1502.csv",
-      "row_count": 3828,
-      "size_bytes": 305088
+      "row_count": 4311,
+      "size_bytes": 343544
     },
     {
       "name": "panahon_lightning_split60min_Oct_18_2026_1602.csv",
       "row_count": 3155,
       "size_bytes": 249896
+    },
+    {
+      "name": "panahon_lightning_split60min_Oct_18_2026_1701.csv",
+      "row_count": 654,
+      "size_bytes": 51729
     }
   ],
-  "generated_at": "2026-10-18T09:00:25.553760+00:00"
+  "generated_at": "2026-10-18T09:11:07.146750+00:00"
 }
