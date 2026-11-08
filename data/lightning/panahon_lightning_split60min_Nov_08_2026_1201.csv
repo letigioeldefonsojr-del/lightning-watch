@@ -1,0 +1,3 @@
+timestamp,latitude,longitude,type,amplitude_ka,height_m,num_sensors
+2026-11-08T04:01:01.027572468Z,6.19167,119.514857,Cloud to Cloud,-8864,15926,7
+2026-11-08T04:01:01.028041825Z,6.147465,119.476369,Cloud to Cloud,25440,4560,16
